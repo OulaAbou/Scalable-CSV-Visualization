@@ -2,7 +2,8 @@ import pandas as pd
 import gower
 import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.cluster.hierarchy import linkage, fcluster
+import numpy as np
 
 columns_names = ['ID', 'Diagnosis', 'radius1', 'texture1', 'perimeter1', 'area1', 'smoothness1',
                  'compactness1', 'concavity1', 'concave_points1', 'symmetry1', 'fractal_dimension1',
@@ -19,16 +20,22 @@ data_array = data.to_numpy()
 gower_distances = gower.gower_matrix(data_array)
 
 # Perform hierarchical clustering
-linkage_matrix = linkage(gower_distances, method='average')
+linkage_matrix = linkage(gower_distances, method='average', optimal_ordering=True)
 
-# Get the order of the leaves
-ordered_indices = leaves_list(linkage_matrix)
+# Define the distance threshold
+distance_threshold = 1.0  # Change this to the desired threshold
 
-# Reorder the distance matrix
-ordered_distances = gower_distances[ordered_indices, :][:, ordered_indices]
+# Get cluster labels
+cluster_labels = fcluster(linkage_matrix, distance_threshold, criterion='distance')
 
-# Plot the reordered similarity matrix as a heatmap
-plt.figure(figsize=(10, 8))
-sns.heatmap(ordered_distances, cmap='viridis')
-plt.title('Reordered Gower\'s Distance Similarity Matrix')
-plt.show()
+# Create subarrays for each cluster
+unique_clusters = np.unique(cluster_labels)
+for cluster_num in unique_clusters:
+    cluster_indices = np.where(cluster_labels == cluster_num)[0]
+    cluster_data = data_array[cluster_indices]
+    
+    print(f'Cluster {cluster_num} Data:')
+    print(cluster_data)
+    print('\n')
+
+print(unique_clusters)
