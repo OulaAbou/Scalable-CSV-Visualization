@@ -9,7 +9,8 @@ class Cluster:
     def getGower(self):
         import gower
         gower_distances = gower.gower_matrix(self.data)
-        return gower_distances
+        similarity_matrix = 1 - gower_distances
+        return similarity_matrix
     
     def getClusters(self, distance_threshold):
         # Perform hierarchical clustering
@@ -39,3 +40,4 @@ class Cluster:
 #     print(f'Cluster {i + 1} Data:')
 #     print(cluster_data)
 #     print('\n')
+

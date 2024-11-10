@@ -1,6 +1,8 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 import pandas as pd
 from Cluster import Cluster
+from similarityMatrix import SimilarityMatrix
+import io
 
 app = Flask(__name__)
 
@@ -29,6 +31,28 @@ def process_file():
         clusters_serializable = [cluster.tolist() for cluster in clusters]
         
         return jsonify({'clusters': clusters_serializable})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/visual_similarity_matrix', methods=['POST'])
+def visual_similarity_matrix():
+    data = request.json
+    file_path = data.get('file_path')
+    
+    if not file_path:
+        return jsonify({'error': 'No file path provided'}), 400
+    
+    try:
+        # Create a SimilarityMatrix object and generate the plot
+        similarity_matrix = SimilarityMatrix(file_path)
+        fig = similarity_matrix.plotMatrix()
+        
+        # Save the plot to a BytesIO object
+        img = io.BytesIO()
+        fig.savefig(img, format='png')
+        img.seek(0)
+        
+        return send_file(img, mimetype='image/png')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
