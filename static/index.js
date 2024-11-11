@@ -1,6 +1,8 @@
+let filePath = null;
+
 document.getElementById('fullGridButton').addEventListener('click', function() {
   // Create a popup input box
-  let filePath = prompt("Please enter the file path:");
+  filePath = prompt("Please enter the file path:");
 
   // Check if the user entered a file path
   if (filePath) {
@@ -78,3 +80,68 @@ document.getElementById('fullGridButton').addEventListener('click', function() {
   }
 });
 
+// document.getElementById('visualSimilarityMatrixButton').addEventListener('click', function() {
+//   // Check if the file path has already been entered
+//   if (filePath) {
+//     console.log("Using previously entered file path:", filePath);
+
+//     // Send the file path to the Flask server
+//     fetch('/visual_similarity_matrix', {
+//       method: 'POST',
+//       headers: {
+//         'Content-Type': 'application/json'
+//       },
+//       body: JSON.stringify({ file_path: filePath })
+//     })
+//     .then(response => response.blob())
+//     .then(blob => {
+//       const url = URL.createObjectURL(blob);
+//       const img = document.createElement('img');
+//       img.src = url;
+//       img.style.width = '100%';
+
+//       // Select the container and clear any existing content
+//       const container = d3.select('.short-container:nth-child(3)');
+//       container.selectAll('*').remove();
+//       container.node().appendChild(img);
+//     })
+//     .catch((error) => {
+//       console.error('Error:', error);
+//     });
+//   } else {
+//     console.log("No file path entered. Please enter the file path using the 'Full Grid' button first.");
+//   }
+// });
+
+document.getElementById('visualSimilarityMatrixButton').addEventListener('click', function() {
+  // Check if the file path has already been entered
+  if (filePath) {
+    console.log("Using previously entered file path:", filePath);
+
+    // Send the file path to the Flask server
+    fetch('/visual_similarity_matrix', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ file_path: filePath })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const img = document.createElement('img');
+      img.src = url;
+      img.style.width = '100%';
+
+      // Select the image-wrapper and clear any existing content
+      const wrapper = d3.select('.short-container:nth-child(3) .image-wrapper');
+      wrapper.selectAll('*').remove();
+      wrapper.node().appendChild(img);
+    })
+    .catch((error) => {
+      console.error('Error:', error);
+    });
+  } else {
+    console.log("No file path entered. Please enter the file path using the 'Full Grid' button first.");
+  }
+});

@@ -1,13 +1,12 @@
 import pandas as pd
 import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster
-
+import gower
 class Cluster:
     def __init__(self, data):
         self.data = data
 
     def getGower(self):
-        import gower
         gower_distances = gower.gower_matrix(self.data)
         similarity_matrix = 1 - gower_distances
         return similarity_matrix

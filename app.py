@@ -1,10 +1,16 @@
 from flask import Flask, request, jsonify, render_template, send_file
+from flask_cors import CORS
 import pandas as pd
 from Cluster import Cluster
 from similarityMatrix import SimilarityMatrix
 import io
+import logging
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
 
 @app.route('/')
 def index():
@@ -32,6 +38,7 @@ def process_file():
         
         return jsonify({'clusters': clusters_serializable})
     except Exception as e:
+        logging.error(f"Error processing file: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/visual_similarity_matrix', methods=['POST'])
@@ -43,8 +50,12 @@ def visual_similarity_matrix():
         return jsonify({'error': 'No file path provided'}), 400
     
     try:
+        # Read the data file
+        data = pd.read_csv(file_path)
+        data = data.to_numpy()
+
         # Create a SimilarityMatrix object and generate the plot
-        similarity_matrix = SimilarityMatrix(file_path)
+        similarity_matrix = SimilarityMatrix(data)
         fig = similarity_matrix.plotMatrix()
         
         # Save the plot to a BytesIO object
@@ -54,7 +65,8 @@ def visual_similarity_matrix():
         
         return send_file(img, mimetype='image/png')
     except Exception as e:
+        logging.error(f"Error generating similarity matrix: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5001)
