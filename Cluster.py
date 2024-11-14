@@ -28,15 +28,15 @@ class Cluster:
         return all_cluster_data
 
 # Example usage
-# test = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv')
-# data_array = test.to_numpy()
-# cluster = Cluster(data_array)
-# clusters = cluster.getClusters(1.0)
-# # print(clusters)
+test = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv')
+data_array = test.to_numpy()
+cluster = Cluster(data_array)
+clusters = cluster.getClusters(1.0)
+# print(clusters)
 
-# # Print the clusters
-# for i, cluster_data in enumerate(clusters):
-#     print(f'Cluster {i + 1} Data:')
-#     print(cluster_data)
-#     print('\n')
+# Print the clusters
+for i, cluster_data in enumerate(clusters):
+    print(f'Cluster {i + 1} Data:')
+    print(cluster_data)
+    print('\n')
 
