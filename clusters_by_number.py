@@ -1,21 +1,22 @@
 import pandas as pd
 import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster
-import gower
-class Cluster:
+
+class ClusterByNumber:
     def __init__(self, data):
         self.data = data
 
     def getGower(self):
+        import gower
         gower_distances = gower.gower_matrix(self.data)
         similarity_matrix = 1 - gower_distances
         return similarity_matrix
     
-    def getClusters(self, distance_threshold):
+    def getClusters(self, num_clusters):
         # Perform hierarchical clustering
         linkage_matrix = linkage(self.getGower(), method='average', optimal_ordering=True)
         # Get cluster labels
-        cluster_labels = fcluster(linkage_matrix, distance_threshold, criterion='distance')
+        cluster_labels = fcluster(linkage_matrix, num_clusters, criterion='maxclust')
 
         # Create subarrays for each cluster
         unique_clusters = np.unique(cluster_labels)
@@ -27,11 +28,11 @@ class Cluster:
 
         return all_cluster_data
 
-# # Example usage
+# Example usage
 # test = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv')
 # data_array = test.to_numpy()
-# cluster = Cluster(data_array)
-# clusters = cluster.getClusters(1.0)
+# cluster = ClusterByNumber(data_array)
+# clusters = cluster.getClusters(num_clusters=5)
 # # print(clusters)
 
 # # Print the clusters
@@ -39,4 +40,3 @@ class Cluster:
 #     print(f'Cluster {i + 1} Data:')
 #     print(cluster_data)
 #     print('\n')
-

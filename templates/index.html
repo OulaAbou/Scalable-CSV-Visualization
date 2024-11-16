@@ -9,20 +9,22 @@
       .container-wrapper {
         display: flex;
         justify-content: space-between;
+        height: 100vh; /* Ensure the wrapper takes the full height */
       }
-      .container {
+      .column {
+        display: flex;
+        flex-direction: column;
+        width: 32%; /* Ensure equal width for all columns */
+      }
+      .container, .short-container {
         position: relative;
-        width: 32%;
-        height: 100vh;
+        width: 100%; /* Ensure containers take full width of their parent */
         border: 1px solid #ccc;
         overflow-y: auto;
+        margin-bottom: 10px; /* Add some space between the containers */
       }
       .short-container {
-        position: relative;
-        width: 32%;
-        height: 400px;
-        border: 1px solid #ccc;
-        overflow-y: auto;
+        height: 50%; /* Half the height for vertically stacked containers */
       }
       .button {
         position: absolute;
@@ -44,15 +46,25 @@
     <h1>CSV Visualizer</h1>
 
     <div class="container-wrapper">
-      <div class="container">
+      <div class="container" style="width: 32%;">
         <button class="button" id="fullGridButton">Full Grid</button>
       </div>
-      <div class="short-container">
-        <button class="button" id="gridSummaryButton">Grid Summary</button>
+      <div class="column">
+        <div class="short-container">
+          <button class="button" id="gridSummaryButton">Grid Summary</button>
+        </div>
+        <div class="short-container">
+          <button class="button" id="scalableGridButton">Scalable Grid</button>
+        </div>
       </div>
-      <div class="short-container">
-        <button class="button" id="visualSimilarityMatrixButton">Visual Similarity Matrix</button>
-        <div class="image-wrapper"></div> <!-- Wrapper for the image -->
+      <div class="column">
+        <div class="short-container">
+          <button class="button" id="visualSimilarityMatrixButton">Visual Similarity Matrix</button>
+          <div class="image-wrapper"></div> <!-- Wrapper for the image -->
+        </div>
+        <div class="short-container">
+          <button class="button" id="newContainerButton">New Container</button>
+        </div>
       </div>
     </div>
 
