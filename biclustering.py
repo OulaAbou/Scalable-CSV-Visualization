@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
     # Load data
     data = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv', names=columns_names)
-    data = data.drop(columns=['ID'])
+    # data = data.drop(columns=['ID'])
 
     # Create biclustering instance
     biclustering = MixedTypeBiclustering(n_row_clusters=5, n_col_clusters=5)
