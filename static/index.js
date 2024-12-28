@@ -624,78 +624,6 @@ function visualizeCSVData(csvData) {
   svg.attr('width', maxXPos + 10);
   svg.attr('height', yPos);
 }
-
-// document.getElementById('gridSummaryButton').addEventListener('click', function() {
-//   if (file) {
-//     const formData = new FormData();
-//     formData.append('file', file);
-
-//     fetch('/upload_file', {
-//       method: 'POST',
-//       body: formData
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//       if (data.error) {
-//         console.error('Error:', data.error);
-//       } else {
-//         console.log('Blocks:', data.blocks);
-
-//         // Select the container and clear any existing SVG content
-//         const container = d3.select('#gridSummaryButton').node().parentNode;
-//         d3.select(container).selectAll('svg').remove();
-
-//         // Create an SVG element within the container
-//         const svg = d3.select(container).append('svg')
-//           .attr('width', '100%')
-//           .attr('height', '100%');
-
-//         // Initialize the starting y position beneath the button
-//         let yPos = 60;
-
-//         // Define the gap between blocks
-//         const gap = 3;
-
-//         // Initialize an object to keep track of the current x and y positions for each row cluster
-//         const clusterPositions = {};
-
-//         // Loop through each block
-//         Object.entries(data.blocks).forEach(([key, block]) => {
-//           const [rowCluster, colCluster, blockId, blockType] = key.split(',');
-//           const blockHeight = block.length * 10; // Height proportional to cluster size
-//           const blockWidth = block[0].length * 10; // Width proportional to number of columns
-//           const color = blockType === 'numerical' ? 'red' : 'blue';
-
-//           // Initialize the positions for the current row cluster if not already done
-//           if (!clusterPositions[rowCluster]) {
-//             clusterPositions[rowCluster] = { x: 10, y: yPos };
-//             yPos += blockHeight + gap; // Update yPos for the next cluster
-//           }
-
-//           // Add a rectangle for each block
-//           svg.append('rect')
-//             .attr('x', clusterPositions[rowCluster].x)
-//             .attr('y', clusterPositions[rowCluster].y)
-//             .attr('width', blockWidth)
-//             .attr('height', blockHeight)
-//             .attr('fill', color);
-
-//           // Update the x position for the next block in the same row cluster
-//           clusterPositions[rowCluster].x += blockWidth + gap;
-//         });
-
-//         // Set the height of the SVG dynamically based on the content
-//         svg.attr('height', yPos);
-//       }
-//     })
-//     .catch(error => {
-//       console.error('Error:', error);
-//     });
-//   } else {
-//     console.log("No file selected. Please select a file using the 'Full Grid' button first.");
-//   }
-// });
-
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
   if (file) {
     const formData = new FormData();
@@ -767,7 +695,7 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
         // Calculate width scaling factor accounting for all gaps
         const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
 
-        let yPos = buttonHeight + 15;
+        let yPos = buttonHeight + 12;
         const clusterPositions = {};
 
         // Draw blocks
