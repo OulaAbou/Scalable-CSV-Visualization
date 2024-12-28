@@ -624,6 +624,7 @@ function visualizeCSVData(csvData) {
   svg.attr('width', maxXPos + 10);
   svg.attr('height', yPos);
 }
+
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
   if (file) {
     const formData = new FormData();
