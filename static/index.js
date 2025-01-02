@@ -625,6 +625,114 @@ function visualizeCSVData(csvData) {
   svg.attr('height', yPos);
 }
 
+// document.getElementById('gridSummaryButton').addEventListener('click', function() {
+//   if (file) {
+//     const formData = new FormData();
+//     formData.append('file', file);
+
+//     fetch('/upload_file', {
+//       method: 'POST',
+//       body: formData
+//     })
+//     .then(response => response.json())
+//     .then(data => {
+//       if (data.error) {
+//         console.error('Error:', data.error);
+//       } else {
+//         console.log('Blocks:', data.blocks);
+
+//         // Select the container and clear any existing SVG content
+//         const container = d3.select('#gridSummaryButton').node().parentNode;
+//         d3.select(container).selectAll('svg').remove();
+
+//         // Get container dimensions
+//         const containerHeight = container.getBoundingClientRect().height;
+//         const containerWidth = container.getBoundingClientRect().width;
+//         const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
+//         const availableHeight = containerHeight - buttonHeight - 10;
+//         const availableWidth = containerWidth - 20; // Left and right padding
+
+//         // Create an SVG element within the container
+//         const svg = d3.select(container).append('svg')
+//           .attr('width', containerWidth)
+//           .attr('height', containerHeight);
+
+//         // Get row clusters
+//         const rowClusters = [...new Set(Object.keys(data.blocks).map(key => key.split(',')[0]))];
+        
+//         // Calculate cluster dimensions and count blocks per cluster
+//         let totalLogicalHeight = 0;
+//         const clusterHeights = {};
+//         const clusterWidths = {};
+//         const blocksPerCluster = {};
+        
+//         rowClusters.forEach(cluster => {
+//           const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
+          
+//           // Calculate max height for this cluster
+//           const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
+//           clusterHeights[cluster] = maxHeight;
+//           totalLogicalHeight += maxHeight;
+
+//           // Calculate total logical width and count blocks for this cluster
+//           const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
+//           clusterWidths[cluster] = totalWidth;
+//           blocksPerCluster[cluster] = clusterBlocks.length;
+//         });
+
+//         // Find the cluster with maximum logical width
+//         const maxClusterLogicalWidth = Math.max(...Object.values(clusterWidths));
+        
+//         // Calculate scaling factors
+//         const totalVerticalGaps = (rowClusters.length - 1) * 3;
+//         const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
+
+//         // For each cluster, calculate the total gaps needed
+//         const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
+//         const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
+//         const gapWidth = 3;
+//         const totalGapWidth = totalHorizontalGaps * gapWidth;
+        
+//         // Calculate width scaling factor accounting for all gaps
+//         const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
+
+//         let yPos = buttonHeight + 12;
+//         const clusterPositions = {};
+
+//         // Draw blocks
+//         Object.entries(data.blocks).forEach(([key, block]) => {
+//           const [rowCluster, colCluster, blockId, blockType] = key.split(',');
+//           const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
+//           const scaledWidth = block[0].length * widthScaleFactor;
+//           const color = blockType === 'numerical' ? 'red' : 'blue';
+
+//           // Initialize positions for new clusters
+//           if (!clusterPositions[rowCluster]) {
+//             clusterPositions[rowCluster] = { x: 10, y: yPos };
+//             yPos += scaledHeight + 3;
+//           }
+
+//           // Add rectangle
+//           svg.append('rect')
+//             .attr('x', clusterPositions[rowCluster].x)
+//             .attr('y', clusterPositions[rowCluster].y)
+//             .attr('width', scaledWidth)
+//             .attr('height', scaledHeight)
+//             .attr('fill', color);
+
+//           // Update x position with fixed gap
+//           clusterPositions[rowCluster].x += scaledWidth + gapWidth;
+//         });
+//       }
+//     })
+//     .catch(error => {
+//       console.error('Error:', error);
+//     });
+//   } else {
+//     console.log("No file selected. Please select a file using the 'Full Grid' button first.");
+//   }
+// });
+
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
   if (file) {
     const formData = new FormData();
@@ -650,7 +758,7 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
         const containerWidth = container.getBoundingClientRect().width;
         const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
         const availableHeight = containerHeight - buttonHeight - 10;
-        const availableWidth = containerWidth - 20; // Left and right padding
+        const availableWidth = containerWidth - 20;
 
         // Create an SVG element within the container
         const svg = d3.select(container).append('svg')
@@ -669,12 +777,10 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
         rowClusters.forEach(cluster => {
           const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
           
-          // Calculate max height for this cluster
           const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
           clusterHeights[cluster] = maxHeight;
           totalLogicalHeight += maxHeight;
 
-          // Calculate total logical width and count blocks for this cluster
           const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
           clusterWidths[cluster] = totalWidth;
           blocksPerCluster[cluster] = clusterBlocks.length;
@@ -687,40 +793,79 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
         const totalVerticalGaps = (rowClusters.length - 1) * 3;
         const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
 
-        // For each cluster, calculate the total gaps needed
         const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
         const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
         const gapWidth = 3;
         const totalGapWidth = totalHorizontalGaps * gapWidth;
         
-        // Calculate width scaling factor accounting for all gaps
         const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
 
         let yPos = buttonHeight + 12;
         const clusterPositions = {};
 
-        // Draw blocks
+        // Function to visualize block details in new container with fixed-size cells
+        function visualizeBlockDetails(blockData, blockType) {
+          const newContainer = document.querySelector('#newContainer');
+          d3.select(newContainer).selectAll('svg').remove();
+
+          // Calculate total space needed
+          const cellSize = 20;
+          const gap = 5;
+          const margin = 10;
+          const startY = 40;
+
+          // Calculate required SVG dimensions based on data
+          const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
+          const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
+
+          // Create SVG with calculated dimensions
+          const detailSvg = d3.select(newContainer).append('svg')
+            .attr('width', svgWidth)
+            .attr('height', svgHeight);
+
+          // Draw cells
+          blockData.forEach((row, rowIndex) => {
+            let currentX = margin;
+            
+            row.forEach((value, colIndex) => {
+              detailSvg.append('rect')
+                .attr('x', currentX)
+                .attr('y', startY + rowIndex * (cellSize + gap))
+                .attr('width', cellSize)
+                .attr('height', cellSize)
+                .attr('fill', blockType === 'numerical' ? 'red' : 'blue')
+                .append('title')
+                .text(value);
+
+              currentX += cellSize + gap;
+            });
+          });
+        }
+
+        // Draw blocks with dynamic sizing
         Object.entries(data.blocks).forEach(([key, block]) => {
           const [rowCluster, colCluster, blockId, blockType] = key.split(',');
           const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
           const scaledWidth = block[0].length * widthScaleFactor;
           const color = blockType === 'numerical' ? 'red' : 'blue';
 
-          // Initialize positions for new clusters
           if (!clusterPositions[rowCluster]) {
             clusterPositions[rowCluster] = { x: 10, y: yPos };
             yPos += scaledHeight + 3;
           }
 
-          // Add rectangle
+          // Add rectangle with click handler
           svg.append('rect')
             .attr('x', clusterPositions[rowCluster].x)
             .attr('y', clusterPositions[rowCluster].y)
             .attr('width', scaledWidth)
             .attr('height', scaledHeight)
-            .attr('fill', color);
+            .attr('fill', color)
+            .style('cursor', 'pointer')
+            .on('click', function() {
+              visualizeBlockDetails(block, blockType);
+            });
 
-          // Update x position with fixed gap
           clusterPositions[rowCluster].x += scaledWidth + gapWidth;
         });
       }

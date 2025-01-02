@@ -91,6 +91,30 @@
       .short-container {
         height: 50%; /* Half the height for vertically stacked containers */
       }
+      .short-container {
+          overflow: auto;  /* Enable both vertical and horizontal scrolling */
+          max-height: 100%;  /* Take full height of parent */
+          max-width: 100%;   /* Take full width of parent */
+        }
+
+        /* Optional: Style the scrollbars */
+        .short-container::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        .short-container::-webkit-scrollbar-track {
+          background: #f1f1f1;
+        }
+
+        .short-container::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 5px;
+        }
+
+        .short-container::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
       .button {
         position: absolute;
         top: 10px;
@@ -139,8 +163,8 @@
             <button class="button" id="visualSimilarityMatrixButton">Visual Similarity Matrix</button>
             <div class="image-wrapper"></div> <!-- Wrapper for the image -->
           </div>
-          <div class="short-container">
-            <button class="button" id="newContainerButton">New Container</button>
+          <div class="short-container" id="newContainer">
+            <!-- <button class="button" id="newContainerButton">New Container</button> -->
           </div>
         </div>
       </div>
