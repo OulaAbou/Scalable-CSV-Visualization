@@ -489,250 +489,41 @@
 //   };
 // }
 
+
+// Global variables to store file and data
 let file = null;
+let csvFileData = null;
 
-document.getElementById('fullGridButton').addEventListener('click', function() {
-  // Create a file input element
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = '.csv';
-
-  // Listen for file selection
-  fileInput.addEventListener('change', function(event) {
-    file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const csvData = e.target.result;
-        visualizeCSVData(csvData);
-      };
-      reader.readAsText(file);
-    }
-  });
-
-  // Trigger the file input dialog
-  fileInput.click();
+// Add click event listener to the search tab
+document.querySelector('.search-tab').addEventListener('click', function() {
+  document.getElementById('csvFileInput').click();
 });
 
-function visualizeCSVData(csvData) {
-  // Parse the CSV data
-  const data = d3.csvParse(csvData);
+// Add change event listener to the file input
+document.getElementById('csvFileInput').addEventListener('change', function(event) {
+  file = event.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      csvFileData = e.target.result;
+      // Update the search tab label to show the file name
+      document.querySelector('.search-tab label').innerHTML = 
+        '<span class="magnifier-icon">&#128269;</span>' + file.name;
+    };
+    reader.readAsText(file);
+  }
+});
 
-  // Define the size of the rectangles and the gap
-  const rectSize = 8; // Size for the rectangles
-  const gap = 3;
+// Full Grid button now only handles visualization
+document.getElementById('fullGridButton').addEventListener('click', function() {
+  if (csvFileData) {
+    visualizeCSVData(csvFileData);
+  } else {
+    alert('Please upload a CSV file first using the search tab.');
+  }
+});
 
-  // Get the column names
-  const columns = data.columns;
-
-  // Define the color palette for the top 4 most frequent values
-  const topColors = ['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'];
-  const defaultColor = 'gray';
-
-  // Calculate the min and max values for each numerical column
-  const numericalScales = columns.map(col => {
-    const values = data.map(row => +row[col]).filter(value => !isNaN(value));
-    if (values.length > 0) {
-      const min = d3.min(values);
-      const max = d3.max(values);
-      return d3.scaleLinear()
-        .domain([min, max])
-        .range(['#ffcccc', '#ff0000']); // Lightest to darkest red
-    }
-    return null;
-  });
-
-  // Calculate the frequency of each value for each categorical column
-  const categoricalColorScales = columns.map(col => {
-    const values = data.map(row => row[col]);
-    const valueCounts = values.reduce((acc, value) => {
-      if (isNaN(value)) {
-        acc[value] = (acc[value] || 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    // Sort values by frequency and get the top 4 most frequent values
-    const sortedValues = Object.entries(valueCounts).sort((a, b) => b[1] - a[1]);
-    const topValues = sortedValues.slice(0, 4).map(d => d[0]);
-
-    // Create a color scale for the top 4 most frequent values
-    const colorScale = d3.scaleOrdinal()
-      .domain(topValues)
-      .range(topColors);
-
-    return { colorScale, topValues };
-  });
-
-  // Select the container and clear any existing SVG content
-  const container = d3.select('#fullGridButton').node().parentNode;
-  d3.select(container).selectAll('svg').remove();
-
-  // Create an SVG element within the container
-  const svg = d3.select(container).append('svg')
-    .attr('width', '100%')
-    .attr('height', '100%')
-    .style('overflow', 'auto');
-
-  // Initialize the starting y position beneath the button
-  let yPos = 60;
-
-  // Initialize the maximum x position to determine the width of the SVG
-  let maxXPos = 0;
-
-  // Loop through each row in the data
-  data.forEach((row, rowIndex) => {
-    // Initialize the starting x position for the items
-    let xPos = 10;
-
-    // Loop through each value in the row
-    columns.forEach((col, colIndex) => {
-      const value = row[col];
-      let color;
-
-      if (!isNaN(value)) {
-        // Numerical value
-        color = numericalScales[colIndex] ? numericalScales[colIndex](+value) : defaultColor;
-      } else {
-        // Categorical value
-        const { colorScale, topValues } = categoricalColorScales[colIndex];
-        color = topValues.includes(value) ? colorScale(value) : defaultColor;
-      }
-
-      // Add a rectangle for each value
-      svg.append('rect')
-        .attr('x', xPos)
-        .attr('y', yPos)
-        .attr('width', rectSize)
-        .attr('height', rectSize)
-        .attr('fill', color);
-
-      // Update the x position for the next value
-      xPos += rectSize + gap;
-
-      // Update the maximum x position
-      if (xPos > maxXPos) {
-        maxXPos = xPos;
-      }
-    });
-
-    // Update the y position for the next row
-    yPos += rectSize + gap;
-  });
-
-  // Set the width and height of the SVG dynamically based on the content
-  svg.attr('width', maxXPos + 10);
-  svg.attr('height', yPos);
-}
-
-// document.getElementById('gridSummaryButton').addEventListener('click', function() {
-//   if (file) {
-//     const formData = new FormData();
-//     formData.append('file', file);
-
-//     fetch('/upload_file', {
-//       method: 'POST',
-//       body: formData
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//       if (data.error) {
-//         console.error('Error:', data.error);
-//       } else {
-//         console.log('Blocks:', data.blocks);
-
-//         // Select the container and clear any existing SVG content
-//         const container = d3.select('#gridSummaryButton').node().parentNode;
-//         d3.select(container).selectAll('svg').remove();
-
-//         // Get container dimensions
-//         const containerHeight = container.getBoundingClientRect().height;
-//         const containerWidth = container.getBoundingClientRect().width;
-//         const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
-//         const availableHeight = containerHeight - buttonHeight - 10;
-//         const availableWidth = containerWidth - 20; // Left and right padding
-
-//         // Create an SVG element within the container
-//         const svg = d3.select(container).append('svg')
-//           .attr('width', containerWidth)
-//           .attr('height', containerHeight);
-
-//         // Get row clusters
-//         const rowClusters = [...new Set(Object.keys(data.blocks).map(key => key.split(',')[0]))];
-        
-//         // Calculate cluster dimensions and count blocks per cluster
-//         let totalLogicalHeight = 0;
-//         const clusterHeights = {};
-//         const clusterWidths = {};
-//         const blocksPerCluster = {};
-        
-//         rowClusters.forEach(cluster => {
-//           const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
-          
-//           // Calculate max height for this cluster
-//           const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
-//           clusterHeights[cluster] = maxHeight;
-//           totalLogicalHeight += maxHeight;
-
-//           // Calculate total logical width and count blocks for this cluster
-//           const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
-//           clusterWidths[cluster] = totalWidth;
-//           blocksPerCluster[cluster] = clusterBlocks.length;
-//         });
-
-//         // Find the cluster with maximum logical width
-//         const maxClusterLogicalWidth = Math.max(...Object.values(clusterWidths));
-        
-//         // Calculate scaling factors
-//         const totalVerticalGaps = (rowClusters.length - 1) * 3;
-//         const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
-
-//         // For each cluster, calculate the total gaps needed
-//         const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
-//         const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
-//         const gapWidth = 3;
-//         const totalGapWidth = totalHorizontalGaps * gapWidth;
-        
-//         // Calculate width scaling factor accounting for all gaps
-//         const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
-
-//         let yPos = buttonHeight + 12;
-//         const clusterPositions = {};
-
-//         // Draw blocks
-//         Object.entries(data.blocks).forEach(([key, block]) => {
-//           const [rowCluster, colCluster, blockId, blockType] = key.split(',');
-//           const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
-//           const scaledWidth = block[0].length * widthScaleFactor;
-//           const color = blockType === 'numerical' ? 'red' : 'blue';
-
-//           // Initialize positions for new clusters
-//           if (!clusterPositions[rowCluster]) {
-//             clusterPositions[rowCluster] = { x: 10, y: yPos };
-//             yPos += scaledHeight + 3;
-//           }
-
-//           // Add rectangle
-//           svg.append('rect')
-//             .attr('x', clusterPositions[rowCluster].x)
-//             .attr('y', clusterPositions[rowCluster].y)
-//             .attr('width', scaledWidth)
-//             .attr('height', scaledHeight)
-//             .attr('fill', color);
-
-//           // Update x position with fixed gap
-//           clusterPositions[rowCluster].x += scaledWidth + gapWidth;
-//         });
-//       }
-//     })
-//     .catch(error => {
-//       console.error('Error:', error);
-//     });
-//   } else {
-//     console.log("No file selected. Please select a file using the 'Full Grid' button first.");
-//   }
-// });
-
+// Grid Summary button handler
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
   if (file) {
     const formData = new FormData();
@@ -747,133 +538,230 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
       if (data.error) {
         console.error('Error:', data.error);
       } else {
-        console.log('Blocks:', data.blocks);
-
-        // Select the container and clear any existing SVG content
-        const container = d3.select('#gridSummaryButton').node().parentNode;
-        d3.select(container).selectAll('svg').remove();
-
-        // Get container dimensions
-        const containerHeight = container.getBoundingClientRect().height;
-        const containerWidth = container.getBoundingClientRect().width;
-        const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
-        const availableHeight = containerHeight - buttonHeight - 10;
-        const availableWidth = containerWidth - 20;
-
-        // Create an SVG element within the container
-        const svg = d3.select(container).append('svg')
-          .attr('width', containerWidth)
-          .attr('height', containerHeight);
-
-        // Get row clusters
-        const rowClusters = [...new Set(Object.keys(data.blocks).map(key => key.split(',')[0]))];
-        
-        // Calculate cluster dimensions and count blocks per cluster
-        let totalLogicalHeight = 0;
-        const clusterHeights = {};
-        const clusterWidths = {};
-        const blocksPerCluster = {};
-        
-        rowClusters.forEach(cluster => {
-          const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
-          
-          const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
-          clusterHeights[cluster] = maxHeight;
-          totalLogicalHeight += maxHeight;
-
-          const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
-          clusterWidths[cluster] = totalWidth;
-          blocksPerCluster[cluster] = clusterBlocks.length;
-        });
-
-        // Find the cluster with maximum logical width
-        const maxClusterLogicalWidth = Math.max(...Object.values(clusterWidths));
-        
-        // Calculate scaling factors
-        const totalVerticalGaps = (rowClusters.length - 1) * 3;
-        const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
-
-        const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
-        const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
-        const gapWidth = 3;
-        const totalGapWidth = totalHorizontalGaps * gapWidth;
-        
-        const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
-
-        let yPos = buttonHeight + 12;
-        const clusterPositions = {};
-
-        // Function to visualize block details in new container with fixed-size cells
-        function visualizeBlockDetails(blockData, blockType) {
-          const newContainer = document.querySelector('#newContainer');
-          d3.select(newContainer).selectAll('svg').remove();
-
-          // Calculate total space needed
-          const cellSize = 20;
-          const gap = 5;
-          const margin = 10;
-          const startY = 40;
-
-          // Calculate required SVG dimensions based on data
-          const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
-          const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
-
-          // Create SVG with calculated dimensions
-          const detailSvg = d3.select(newContainer).append('svg')
-            .attr('width', svgWidth)
-            .attr('height', svgHeight);
-
-          // Draw cells
-          blockData.forEach((row, rowIndex) => {
-            let currentX = margin;
-            
-            row.forEach((value, colIndex) => {
-              detailSvg.append('rect')
-                .attr('x', currentX)
-                .attr('y', startY + rowIndex * (cellSize + gap))
-                .attr('width', cellSize)
-                .attr('height', cellSize)
-                .attr('fill', blockType === 'numerical' ? 'red' : 'blue')
-                .append('title')
-                .text(value);
-
-              currentX += cellSize + gap;
-            });
-          });
-        }
-
-        // Draw blocks with dynamic sizing
-        Object.entries(data.blocks).forEach(([key, block]) => {
-          const [rowCluster, colCluster, blockId, blockType] = key.split(',');
-          const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
-          const scaledWidth = block[0].length * widthScaleFactor;
-          const color = blockType === 'numerical' ? 'red' : 'blue';
-
-          if (!clusterPositions[rowCluster]) {
-            clusterPositions[rowCluster] = { x: 10, y: yPos };
-            yPos += scaledHeight + 3;
-          }
-
-          // Add rectangle with click handler
-          svg.append('rect')
-            .attr('x', clusterPositions[rowCluster].x)
-            .attr('y', clusterPositions[rowCluster].y)
-            .attr('width', scaledWidth)
-            .attr('height', scaledHeight)
-            .attr('fill', color)
-            .style('cursor', 'pointer')
-            .on('click', function() {
-              visualizeBlockDetails(block, blockType);
-            });
-
-          clusterPositions[rowCluster].x += scaledWidth + gapWidth;
-        });
+        visualizeGridSummary(data);
       }
     })
     .catch(error => {
       console.error('Error:', error);
     });
   } else {
-    console.log("No file selected. Please select a file using the 'Full Grid' button first.");
+    alert("Please upload a file using the search tab first.");
   }
 });
+
+// Full Grid Visualization Function
+function visualizeCSVData(csvData) {
+  const data = d3.csvParse(csvData);
+  const rectSize = 8;
+  const gap = 3;
+  const columns = data.columns;
+  const topColors = ['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'];
+  const defaultColor = 'gray';
+
+  // Calculate numerical scales
+  const numericalScales = columns.map(col => {
+    const values = data.map(row => +row[col]).filter(value => !isNaN(value));
+    if (values.length > 0) {
+      const min = d3.min(values);
+      const max = d3.max(values);
+      return d3.scaleLinear()
+        .domain([min, max])
+        .range(['#ffcccc', '#ff0000']);
+    }
+    return null;
+  });
+
+  // Calculate categorical scales
+  const categoricalColorScales = columns.map(col => {
+    const values = data.map(row => row[col]);
+    const valueCounts = values.reduce((acc, value) => {
+      if (isNaN(value)) {
+        acc[value] = (acc[value] || 0) + 1;
+      }
+      return acc;
+    }, {});
+
+    const sortedValues = Object.entries(valueCounts).sort((a, b) => b[1] - a[1]);
+    const topValues = sortedValues.slice(0, 4).map(d => d[0]);
+
+    const colorScale = d3.scaleOrdinal()
+      .domain(topValues)
+      .range(topColors);
+
+    return { colorScale, topValues };
+  });
+
+  const container = d3.select('#fullGridButton').node().parentNode;
+  d3.select(container).selectAll('svg').remove();
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', '100%')
+    .attr('height', '100%')
+    .style('overflow', 'auto');
+
+  let yPos = 60;
+  let maxXPos = 0;
+
+  // Create visualization
+  data.forEach((row, rowIndex) => {
+    let xPos = 10;
+
+    columns.forEach((col, colIndex) => {
+      const value = row[col];
+      let color;
+
+      if (!isNaN(value)) {
+        color = numericalScales[colIndex] ? numericalScales[colIndex](+value) : defaultColor;
+      } else {
+        const { colorScale, topValues } = categoricalColorScales[colIndex];
+        color = topValues.includes(value) ? colorScale(value) : defaultColor;
+      }
+
+      svg.append('rect')
+        .attr('x', xPos)
+        .attr('y', yPos)
+        .attr('width', rectSize)
+        .attr('height', rectSize)
+        .attr('fill', color);
+
+      xPos += rectSize + gap;
+      if (xPos > maxXPos) {
+        maxXPos = xPos;
+      }
+    });
+
+    yPos += rectSize + gap;
+  });
+
+  svg.attr('width', maxXPos + 10)
+    .attr('height', yPos);
+}
+
+// Grid Summary Visualization Function
+function visualizeGridSummary(data) {
+  const container = d3.select('#gridSummaryButton').node().parentNode;
+  d3.select(container).selectAll('svg').remove();
+
+  const containerHeight = container.getBoundingClientRect().height;
+  const containerWidth = container.getBoundingClientRect().width;
+  const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
+  const availableHeight = containerHeight - buttonHeight - 10;
+  const availableWidth = containerWidth - 20;
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', containerWidth)
+    .attr('height', containerHeight);
+
+  const rowClusters = [...new Set(Object.keys(data.blocks).map(key => key.split(',')[0]))];
+  
+  // Calculate dimensions
+  let totalLogicalHeight = 0;
+  const clusterHeights = {};
+  const clusterWidths = {};
+  const blocksPerCluster = {};
+  
+  rowClusters.forEach(cluster => {
+    const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
+    const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
+    clusterHeights[cluster] = maxHeight;
+    totalLogicalHeight += maxHeight;
+    const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
+    clusterWidths[cluster] = totalWidth;
+    blocksPerCluster[cluster] = clusterBlocks.length;
+  });
+
+  // Calculate scaling factors
+  const maxClusterLogicalWidth = Math.max(...Object.values(clusterWidths));
+  const totalVerticalGaps = (rowClusters.length - 1) * 3;
+  const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
+  const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
+  const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
+  const gapWidth = 3;
+  const totalGapWidth = totalHorizontalGaps * gapWidth;
+  const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
+
+  let yPos = buttonHeight + 12;
+  const clusterPositions = {};
+
+  // Create visualization
+  Object.entries(data.blocks).forEach(([key, block]) => {
+    const [rowCluster, colCluster, blockId, blockType] = key.split(',');
+    const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
+    const scaledWidth = block[0].length * widthScaleFactor;
+    const color = blockType === 'numerical' ? '#FF7F50' : '#4682B4';
+
+    if (!clusterPositions[rowCluster]) {
+      clusterPositions[rowCluster] = { x: 10, y: yPos };
+      yPos += scaledHeight + 3;
+    }
+
+    svg.append('rect')
+      .attr('x', clusterPositions[rowCluster].x)
+      .attr('y', clusterPositions[rowCluster].y)
+      .attr('width', scaledWidth)
+      .attr('height', scaledHeight)
+      .attr('fill', color)
+      .style('cursor', 'pointer')
+      .on('click', function() {
+        visualizeBlockDetails(block, blockType);
+      });
+
+    clusterPositions[rowCluster].x += scaledWidth + gapWidth;
+  });
+}
+
+// Block Details Visualization Function
+function visualizeBlockDetails(blockData, blockType) {
+  const newContainer = document.querySelector('#newContainer');
+  d3.select(newContainer).selectAll('svg').remove();
+
+  const cellSize = 20;
+  const gap = 5;
+  const margin = 10;
+  const startY = 40;
+
+  const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
+  const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
+
+  const detailSvg = d3.select(newContainer).append('svg')
+    .attr('width', svgWidth)
+    .attr('height', svgHeight);
+
+  // Create color scales
+  let colorScale;
+  if (blockType === 'numerical') {
+    const values = blockData.flat().map(Number);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    colorScale = d3.scaleSequential()
+      .domain([min, max])
+      .interpolator(d3.interpolateBlues);
+  } else {
+    const uniqueValues = [...new Set(blockData.flat())];
+    colorScale = d3.scaleOrdinal()
+      .domain(uniqueValues)
+      .range(d3.schemeCategory10);
+  }
+
+  // Create visualization
+  blockData.forEach((row, rowIndex) => {
+    let currentX = margin;
+    
+    row.forEach((value, colIndex) => {
+      const cellColor = blockType === 'numerical' ? 
+        colorScale(Number(value)) : 
+        colorScale(value);
+
+      detailSvg.append('rect')
+        .attr('x', currentX)
+        .attr('y', startY + rowIndex * (cellSize + gap))
+        .attr('width', cellSize)
+        .attr('height', cellSize)
+        .attr('fill', cellColor)
+        .append('title')
+        .text(value);
+
+      currentX += cellSize + gap;
+    });
+  });
+}
