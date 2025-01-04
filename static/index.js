@@ -489,32 +489,100 @@
 //   };
 // }
 
-
-// Global variables to store file and data
+// Global variables to store file, data, and color scales
 let file = null;
 let csvFileData = null;
+let globalColorScales = null;
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
   document.getElementById('csvFileInput').click();
 });
 
-// Add change event listener to the file input
-document.getElementById('csvFileInput').addEventListener('change', function(event) {
+// Function to generate color scales for all columns
+function generateColorScales(data) {
+  const columns = data.columns;
+  const colorScales = {};
+
+  columns.forEach(col => {
+    const values = data.map(row => row[col]);
+    const isNumeric = values.every(value => !isNaN(value) && value !== '');
+
+    if (isNumeric) {
+      const numericValues = values.map(Number);
+      const min = d3.min(numericValues);
+      const max = d3.max(numericValues);
+      colorScales[col] = {
+        type: 'numerical',
+        scale: d3.scaleLinear()
+          .domain([min, max])
+          .range(['#fdd49e', '#7f0000'])
+      };
+    } else {
+      const valueCounts = values.reduce((acc, value) => {
+        acc[value] = (acc[value] || 0) + 1;
+        return acc;
+      }, {});
+
+      const topValues = Object.entries(valueCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(d => d[0]);
+
+      colorScales[col] = {
+        type: 'categorical',
+        scale: d3.scaleOrdinal()
+          .domain(topValues)
+          .range(['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'])
+          .unknown('gray')
+      };
+    }
+  });
+
+  return colorScales;
+}
+
+// Modified file input handler
+document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      csvFileData = e.target.result;
-      // Update the search tab label to show the file name
-      document.querySelector('.search-tab label').innerHTML = 
-        '<span class="magnifier-icon">&#128269;</span>' + file.name;
-    };
-    reader.readAsText(file);
+    try {
+      // Read the file as text
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        csvFileData = e.target.result;
+        try {
+          // Parse CSV and generate color scales
+          const data = d3.csvParse(csvFileData);
+          globalColorScales = generateColorScales(data);
+          
+          // Update the search tab label
+          document.querySelector('.search-tab label').innerHTML = 
+            '<span class="magnifier-icon">&#128269;</span>' + file.name;
+          
+          // Automatically visualize the full grid
+          visualizeCSVData(csvFileData);
+        } catch (error) {
+          console.error('Error processing CSV:', error);
+          alert('Error processing the CSV file. Please check the file format.');
+        }
+      };
+
+      reader.onerror = function() {
+        console.error('Error reading file');
+        alert('Error reading the file. Please try again.');
+      };
+
+      reader.readAsText(file);
+    } catch (error) {
+      console.error('Error handling file:', error);
+      alert('Error handling the file. Please try again.');
+    }
   }
 });
 
-// Full Grid button now only handles visualization
+// Modified Full Grid button handler
 document.getElementById('fullGridButton').addEventListener('click', function() {
   if (csvFileData) {
     visualizeCSVData(csvFileData);
@@ -549,47 +617,12 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-// Full Grid Visualization Function
+// Full Grid visualization function
 function visualizeCSVData(csvData) {
   const data = d3.csvParse(csvData);
   const rectSize = 8;
   const gap = 3;
   const columns = data.columns;
-  const topColors = ['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'];
-  const defaultColor = 'gray';
-
-  // Calculate numerical scales
-  const numericalScales = columns.map(col => {
-    const values = data.map(row => +row[col]).filter(value => !isNaN(value));
-    if (values.length > 0) {
-      const min = d3.min(values);
-      const max = d3.max(values);
-      return d3.scaleLinear()
-        .domain([min, max])
-        .range(['#ffcccc', '#ff0000']);
-    }
-    return null;
-  });
-
-  // Calculate categorical scales
-  const categoricalColorScales = columns.map(col => {
-    const values = data.map(row => row[col]);
-    const valueCounts = values.reduce((acc, value) => {
-      if (isNaN(value)) {
-        acc[value] = (acc[value] || 0) + 1;
-      }
-      return acc;
-    }, {});
-
-    const sortedValues = Object.entries(valueCounts).sort((a, b) => b[1] - a[1]);
-    const topValues = sortedValues.slice(0, 4).map(d => d[0]);
-
-    const colorScale = d3.scaleOrdinal()
-      .domain(topValues)
-      .range(topColors);
-
-    return { colorScale, topValues };
-  });
 
   const container = d3.select('#fullGridButton').node().parentNode;
   d3.select(container).selectAll('svg').remove();
@@ -599,22 +632,22 @@ function visualizeCSVData(csvData) {
     .attr('height', '100%')
     .style('overflow', 'auto');
 
-  let yPos = 60;
+  let yPos = 20;
   let maxXPos = 0;
 
-  // Create visualization
+  // Create visualization using global color scales
   data.forEach((row, rowIndex) => {
     let xPos = 10;
 
     columns.forEach((col, colIndex) => {
       const value = row[col];
+      const colorScale = globalColorScales[col];
       let color;
 
-      if (!isNaN(value)) {
-        color = numericalScales[colIndex] ? numericalScales[colIndex](+value) : defaultColor;
+      if (colorScale.type === 'numerical') {
+        color = colorScale.scale(+value);
       } else {
-        const { colorScale, topValues } = categoricalColorScales[colIndex];
-        color = topValues.includes(value) ? colorScale(value) : defaultColor;
+        color = colorScale.scale(value);
       }
 
       svg.append('rect')
@@ -637,7 +670,7 @@ function visualizeCSVData(csvData) {
     .attr('height', yPos);
 }
 
-// Grid Summary Visualization Function
+// Grid Summary visualization function
 function visualizeGridSummary(data) {
   const container = d3.select('#gridSummaryButton').node().parentNode;
   d3.select(container).selectAll('svg').remove();
@@ -652,7 +685,8 @@ function visualizeGridSummary(data) {
     .attr('width', containerWidth)
     .attr('height', containerHeight);
 
-  const rowClusters = [...new Set(Object.keys(data.blocks).map(key => key.split(',')[0]))];
+  const blocks = data.blocks;
+  const rowClusters = [...new Set(Object.keys(blocks).map(key => key.split(',')[0]))];
   
   // Calculate dimensions
   let totalLogicalHeight = 0;
@@ -661,11 +695,11 @@ function visualizeGridSummary(data) {
   const blocksPerCluster = {};
   
   rowClusters.forEach(cluster => {
-    const clusterBlocks = Object.entries(data.blocks).filter(([key]) => key.split(',')[0] === cluster);
-    const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.length));
+    const clusterBlocks = Object.entries(blocks).filter(([key]) => key.split(',')[0] === cluster);
+    const maxHeight = Math.max(...clusterBlocks.map(([_, block]) => block.data.length));
     clusterHeights[cluster] = maxHeight;
     totalLogicalHeight += maxHeight;
-    const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block[0].length, 0);
+    const totalWidth = clusterBlocks.reduce((sum, [_, block]) => sum + block.data[0].length, 0);
     clusterWidths[cluster] = totalWidth;
     blocksPerCluster[cluster] = clusterBlocks.length;
   });
@@ -684,41 +718,43 @@ function visualizeGridSummary(data) {
   const clusterPositions = {};
 
   // Create visualization
-  Object.entries(data.blocks).forEach(([key, block]) => {
+  Object.entries(blocks).forEach(([key, blockInfo]) => {
     const [rowCluster, colCluster, blockId, blockType] = key.split(',');
+    const block = blockInfo.data;
+    const columns = blockInfo.columns;
     const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
     const scaledWidth = block[0].length * widthScaleFactor;
-    const color = blockType === 'numerical' ? '#FF7F50' : '#4682B4';
 
     if (!clusterPositions[rowCluster]) {
       clusterPositions[rowCluster] = { x: 10, y: yPos };
       yPos += scaledHeight + 3;
     }
 
-    svg.append('rect')
+    const rect = svg.append('rect')
       .attr('x', clusterPositions[rowCluster].x)
       .attr('y', clusterPositions[rowCluster].y)
       .attr('width', scaledWidth)
       .attr('height', scaledHeight)
-      .attr('fill', color)
+      .attr('fill', blockType === 'numerical' ? '#fdd49e' : '#4682B4')
       .style('cursor', 'pointer')
       .on('click', function() {
-        visualizeBlockDetails(block, blockType);
+        visualizeBlockDetails(block, blockType, columns);
       });
 
     clusterPositions[rowCluster].x += scaledWidth + gapWidth;
   });
 }
 
-// Block Details Visualization Function
-function visualizeBlockDetails(blockData, blockType) {
+// Block Details visualization function
+function visualizeBlockDetails(blockData, blockType, columns) {
   const newContainer = document.querySelector('#newContainer');
   d3.select(newContainer).selectAll('svg').remove();
 
   const cellSize = 20;
   const gap = 5;
   const margin = 10;
-  const startY = 40;
+  const headerHeight = 30;
+  const startY = headerHeight + margin;
 
   const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
   const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
@@ -727,30 +763,36 @@ function visualizeBlockDetails(blockData, blockType) {
     .attr('width', svgWidth)
     .attr('height', svgHeight);
 
-  // Create color scales
-  let colorScale;
-  if (blockType === 'numerical') {
-    const values = blockData.flat().map(Number);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    colorScale = d3.scaleSequential()
-      .domain([min, max])
-      .interpolator(d3.interpolateBlues);
-  } else {
-    const uniqueValues = [...new Set(blockData.flat())];
-    colorScale = d3.scaleOrdinal()
-      .domain(uniqueValues)
-      .range(d3.schemeCategory10);
+  // Add column names as headers vertically
+  if (columns) {
+    columns.forEach((col, index) => {
+      detailSvg.append('text')
+        .attr('x', margin + index * (cellSize + gap) + cellSize / 2) // Adjust x position
+        .attr('y', headerHeight) // Adjust y position to be at the top of the grid
+        .attr('text-anchor', 'middle') // Center align the text
+        .attr('transform', `rotate(-90, ${margin + index * (cellSize + gap) + cellSize / 2}, ${headerHeight})`) // Rotate around the text's position
+        .style('font-size', '12px')
+        .text(col);
+    });
   }
 
-  // Create visualization
+
+  // Draw cells
   blockData.forEach((row, rowIndex) => {
     let currentX = margin;
     
     row.forEach((value, colIndex) => {
-      const cellColor = blockType === 'numerical' ? 
-        colorScale(Number(value)) : 
-        colorScale(value);
+      const columnName = columns[colIndex];
+      const colorScale = globalColorScales[columnName];
+      let cellColor;
+
+      if (colorScale) {
+        cellColor = colorScale.type === 'numerical' ? 
+          colorScale.scale(Number(value)) : 
+          colorScale.scale(value);
+      } else {
+        cellColor = blockType === 'numerical' ? '#fdd49e' : '#4682B4';
+      }
 
       detailSvg.append('rect')
         .attr('x', currentX)
