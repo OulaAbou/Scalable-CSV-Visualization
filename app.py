@@ -152,37 +152,6 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
-# @app.route('/upload_file', methods=['POST'])
-# def upload_file():
-#     if 'file' not in request.files:
-#         return jsonify({'error': 'No file part'}), 400
-
-#     file = request.files['file']
-#     if file.filename == '':
-#         return jsonify({'error': 'No selected file'}), 400
-
-#     try:
-#         # Read the CSV file
-#         data = pd.read_csv(file)
-
-#         # Create a MixedTypeBiclustering instance and fit the data
-#         biclustering = MixedTypeBiclustering(n_row_clusters=5, n_col_clusters=5)
-#         biclustering.fit(data)
-
-#         # Separate mixed-type blocks
-#         separated_blocks = biclustering.separate_mixed_type_blocks(data)
-
-#         # Convert separated blocks to a serializable format
-#         blocks_serializable = {
-#             f"{row_cluster},{col_cluster},{block_id},{block_type}": block.values.tolist()
-#             for (row_cluster, col_cluster, block_id, block_type), block in separated_blocks.items()
-#         }
-
-#         return jsonify({'blocks': blocks_serializable})
-#     except Exception as e:
-#         return jsonify({'error': str(e)}), 500
-
-
 @app.route('/upload_file', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
