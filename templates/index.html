@@ -141,9 +141,16 @@
         <input type="file" id="csvFileInput" accept=".csv">
       </div>
     </div>
-    <div class="control-panel">
+        <div class="control-panel">
       <h1>CSV Visualizer</h1>
       <!-- Add control panel content here -->
+      <label for="rowClusters">Number of Rows Clusters:</label>
+      <input type="range" id="rowClusters" name="rowClusters" min="1" max="10" value="5">
+      <span id="rowClustersValue">5</span>
+      <br>
+      <label for="colClusters">Number of Columns Clusters:</label>
+      <input type="range" id="colClusters" name="colClusters" min="1" max="10" value="5">
+      <span id="colClustersValue">5</span>
     </div>
     <div class="main-content">
       <div class="container-wrapper">

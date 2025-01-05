@@ -152,6 +152,39 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
+# @app.route('/get_clusters', methods=['POST'])
+# def get_clusters():
+#     if 'file' not in request.files:
+#         return jsonify({'error': 'No file part'}), 400
+
+#     file = request.files['file']
+#     if file.filename == '':
+#         return jsonify({'error': 'No selected file'}), 400
+
+#     try:
+#         # Read the CSV file
+#         data = pd.read_csv(file)
+
+#         # Create a MixedTypeBiclustering instance and fit the data
+#         biclustering = MixedTypeBiclustering(n_row_clusters=8, n_col_clusters=4)
+#         biclustering.fit(data)
+
+#         # Separate mixed-type blocks
+#         separated_blocks = biclustering.separate_mixed_type_blocks(data)
+
+#         # Convert separated blocks to a serializable format with column information
+#         blocks_serializable = {
+#             f"{row_cluster},{col_cluster},{block_id},{block_type}": {
+#                 'data': block.values.tolist(),
+#                 'columns': block.columns.tolist()
+#             }
+#             for (row_cluster, col_cluster, block_id, block_type), block in separated_blocks.items()
+#         }
+
+#         return jsonify({'blocks': blocks_serializable})
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
+
 @app.route('/get_clusters', methods=['POST'])
 def get_clusters():
     if 'file' not in request.files:
@@ -162,11 +195,14 @@ def get_clusters():
         return jsonify({'error': 'No selected file'}), 400
 
     try:
+        row_clusters = int(request.form.get('rowClusters', 5))
+        col_clusters = int(request.form.get('colClusters', 5))
+
         # Read the CSV file
         data = pd.read_csv(file)
 
         # Create a MixedTypeBiclustering instance and fit the data
-        biclustering = MixedTypeBiclustering(n_row_clusters=5, n_col_clusters=5)
+        biclustering = MixedTypeBiclustering(n_row_clusters=row_clusters, n_col_clusters=col_clusters)
         biclustering.fit(data)
 
         # Separate mixed-type blocks

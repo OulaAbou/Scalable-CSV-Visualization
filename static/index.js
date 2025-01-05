@@ -591,11 +591,22 @@ document.getElementById('fullGridButton').addEventListener('click', function() {
   }
 });
 
+// Update slider values display
+document.getElementById('rowClusters').addEventListener('input', function() {
+  document.getElementById('rowClustersValue').textContent = this.value;
+});
+
+document.getElementById('colClusters').addEventListener('input', function() {
+  document.getElementById('colClustersValue').textContent = this.value;
+});
+
 // Grid Summary button handler
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
   if (file) {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('rowClusters', document.getElementById('rowClusters').value);
+    formData.append('colClusters', document.getElementById('colClusters').value);
 
     fetch('/get_clusters', {
       method: 'POST',
@@ -616,6 +627,32 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
     alert("Please upload a file using the search tab first.");
   }
 });
+
+// // Grid Summary button handler
+// document.getElementById('gridSummaryButton').addEventListener('click', function() {
+//   if (file) {
+//     const formData = new FormData();
+//     formData.append('file', file);
+
+//     fetch('/get_clusters', {
+//       method: 'POST',
+//       body: formData
+//     })
+//     .then(response => response.json())
+//     .then(data => {
+//       if (data.error) {
+//         console.error('Error:', data.error);
+//       } else {
+//         visualizeGridSummary(data);
+//       }
+//     })
+//     .catch(error => {
+//       console.error('Error:', error);
+//     });
+//   } else {
+//     alert("Please upload a file using the search tab first.");
+//   }
+// });
 
 // Full Grid visualization function
 function visualizeCSVData(csvData) {
