@@ -597,7 +597,7 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
     const formData = new FormData();
     formData.append('file', file);
 
-    fetch('/upload_file', {
+    fetch('/get_clusters', {
       method: 'POST',
       body: formData
     })

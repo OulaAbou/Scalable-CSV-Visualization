@@ -18,8 +18,8 @@
 # def index():
 #     return render_template('index.html')
 
-# @app.route('/upload_file', methods=['POST'])
-# def upload_file():
+# @app.route('/get_clusters', methods=['POST'])
+# def get_clusters():
 #     if 'file' not in request.files:
 #         return jsonify({'error': 'No file part'}), 400
 
@@ -152,8 +152,8 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
-@app.route('/upload_file', methods=['POST'])
-def upload_file():
+@app.route('/get_clusters', methods=['POST'])
+def get_clusters():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
 
