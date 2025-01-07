@@ -628,32 +628,6 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-// // Grid Summary button handler
-// document.getElementById('gridSummaryButton').addEventListener('click', function() {
-//   if (file) {
-//     const formData = new FormData();
-//     formData.append('file', file);
-
-//     fetch('/get_clusters', {
-//       method: 'POST',
-//       body: formData
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//       if (data.error) {
-//         console.error('Error:', data.error);
-//       } else {
-//         visualizeGridSummary(data);
-//       }
-//     })
-//     .catch(error => {
-//       console.error('Error:', error);
-//     });
-//   } else {
-//     alert("Please upload a file using the search tab first.");
-//   }
-// });
-
 // Full Grid visualization function
 function visualizeCSVData(csvData) {
   const data = d3.csvParse(csvData);
