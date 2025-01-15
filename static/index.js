@@ -52,7 +52,7 @@ function generateColorScales(data) {
   return colorScales;
 }
 
-// Modified file input handler
+// Modify the file input handler to create legends when data is loaded
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
@@ -68,10 +68,13 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
           document.querySelector('.search-tab label').innerHTML = 
             '<span class="magnifier-icon">&#128269;</span>' + file.name;
           
+          // Create legends after generating color scales
+          createLegends(globalColorScales);
+          
           visualizeCSVData(csvFileData);
         } catch (error) {
           console.error('Error processing CSV:', error);
-          alert('Error processing the CSV file. Please check the file format.');
+          alert('Error processing CSV file. Please check the file format.');
         }
       };
 
@@ -87,6 +90,7 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
     }
   }
 });
+
 
 // Modified Full Grid button handler
 document.getElementById('fullGridButton').addEventListener('click', function() {
@@ -462,4 +466,176 @@ function visualizeBlockDetails(blockData, blockType, columns) {
       currentX += cellSize + gap;
     });
   });
+}
+
+// Add this function to create legends
+function createLegends(colorScales) {
+  // Remove any existing legends
+  d3.select('.control-panel').selectAll('.legend-container').remove();
+  
+  // Create container for legends
+  const legendContainer = d3.select('.control-panel')
+    .append('div')
+    .attr('class', 'legend-container')
+    .style('margin-top', '20px');
+    
+  // Add title
+  legendContainer.append('h2')
+    .style('font-size', '1em')
+    .style('margin-bottom', '10px')
+    .text('Color Legends');
+
+  // Process numerical and categorical scales separately
+  const numericalScales = {};
+  const categoricalScales = {};
+  
+  Object.entries(colorScales).forEach(([column, colorScale]) => {
+    if (colorScale.type === 'numerical') {
+      numericalScales[column] = colorScale;
+    } else {
+      categoricalScales[column] = colorScale;
+    }
+  });
+
+  // Create numerical legend if we have any numerical scales
+  if (Object.keys(numericalScales).length > 0) {
+    const numericalLegend = legendContainer.append('div')
+      .attr('class', 'numerical-legend')
+      .style('margin-bottom', '15px');
+
+    numericalLegend.append('h3')
+      .style('font-size', '0.9em')
+      .style('margin-bottom', '5px')
+      .text('Numerical Values');
+
+    // Get the color range from the first numerical scale
+    const referenceScale = Object.values(numericalScales)[0].scale;
+    const colorRange = referenceScale.range();
+
+    // Create gradient for normalized values (0-100%)
+    const gradientWidth = 150;
+    const gradientHeight = 15;
+    const labelSpacing = 15; // Space between gradient and labels
+
+    const gradientSvg = numericalLegend.append('svg')
+      .attr('width', gradientWidth)
+      .attr('height', gradientHeight + labelSpacing * 2); // Height for gradient + labels above and below
+
+    const gradient = gradientSvg.append('defs')
+      .append('linearGradient')
+      .attr('id', 'numerical-gradient')
+      .attr('x1', '0%')
+      .attr('x2', '100%');
+
+    gradient.append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', colorRange[0]);
+
+    gradient.append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', colorRange[1]);
+
+    // Position the gradient rectangle in the middle
+    gradientSvg.append('rect')
+      .attr('x', 0)
+      .attr('y', labelSpacing) // Position between the labels
+      .attr('width', gradientWidth)
+      .attr('height', gradientHeight)
+      .style('fill', 'url(#numerical-gradient)');
+
+    // Add min/max labels above the gradient
+    gradientSvg.append('text')
+      .attr('x', 0)
+      .attr('y', labelSpacing - 3) // Position above gradient
+      .style('font-size', '0.8em')
+      .style('text-anchor', 'start')
+      .style('fill', 'white')
+      .text('Min');
+
+    gradientSvg.append('text')
+      .attr('x', gradientWidth)
+      .attr('y', labelSpacing - 3)
+      .style('font-size', '0.8em')
+      .style('text-anchor', 'end')
+      .style('fill', 'white')
+      .text('Max');
+  }
+
+  // Create categorical legends for each unique color scheme
+  if (Object.keys(categoricalScales).length > 0) {
+    const categoricalLegend = legendContainer.append('div')
+      .attr('class', 'categorical-legend')
+      .style('margin-bottom', '15px');
+
+    categoricalLegend.append('h3')
+      .style('font-size', '0.9em')
+      .style('margin-bottom', '5px')
+      .text('Categorical Values');
+
+    // Group scales by their unique color schemes
+    const uniqueSchemes = new Map();
+    Object.entries(categoricalScales).forEach(([column, scale]) => {
+      const schemeKey = scale.scale.range().join(',');
+      if (!uniqueSchemes.has(schemeKey)) {
+        uniqueSchemes.set(schemeKey, {
+          scale: scale.scale,
+          columns: [column]
+        });
+      } else {
+        uniqueSchemes.get(schemeKey).columns.push(column);
+      }
+    });
+
+    uniqueSchemes.forEach((schemeInfo, schemeKey) => {
+      const schemeContainer = categoricalLegend.append('div')
+        .style('margin-bottom', '10px');
+      
+      // Add column names that use this scheme
+      schemeContainer.append('div')
+        .style('font-size', '0.8em')
+        .style('margin-bottom', '3px')
+        .style('color', '#bdc3c7')
+        .text(`Columns: ${schemeInfo.columns.join(', ')}`);
+
+      const swatchSize = 15;
+      const swatchGap = 5;
+
+      const swatchContainer = schemeContainer.append('div')
+        .style('display', 'flex')
+        .style('flex-direction', 'column')
+        .style('gap', '5px');
+
+      // Create swatches for each value in the domain
+      schemeInfo.scale.domain().forEach((value) => {
+        const swatchRow = swatchContainer.append('div')
+          .style('display', 'flex')
+          .style('align-items', 'center')
+          .style('gap', `${swatchGap}px`);
+
+        swatchRow.append('div')
+          .style('width', `${swatchSize}px`)
+          .style('height', `${swatchSize}px`)
+          .style('background-color', schemeInfo.scale(value));
+
+        swatchRow.append('span')
+          .style('font-size', '0.8em')
+          .text(value);
+      });
+
+      // Add "Other" category
+      const otherRow = swatchContainer.append('div')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('gap', `${swatchGap}px`);
+
+      otherRow.append('div')
+        .style('width', `${swatchSize}px`)
+        .style('height', `${swatchSize}px`)
+        .style('background-color', schemeInfo.scale.unknown());
+
+      otherRow.append('span')
+        .style('font-size', '0.8em')
+        .text('Other');
+    });
+  }
 }
