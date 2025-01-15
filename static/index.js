@@ -186,9 +186,8 @@ function visualizeCSVData(csvData) {
     .attr('height', yPos);
 }
 
-// Modified Grid Summary visualization function with context menu
 function visualizeGridSummary(data) {
-  gridSummaryData = data; // Store the data
+  gridSummaryData = data;
   const container = d3.select('#gridSummaryButton').node().parentNode;
   d3.select(container).selectAll('svg').remove();
 
@@ -225,46 +224,75 @@ function visualizeGridSummary(data) {
   const maxClusterLogicalWidth = Math.max(...Object.values(clusterWidths));
   const totalVerticalGaps = (rowClusters.length - 1) * 3;
   const heightScaleFactor = (availableHeight - totalVerticalGaps) / totalLogicalHeight;
-  const maxBlocksInAnyCluster = Math.max(...Object.values(blocksPerCluster));
-  const totalHorizontalGaps = maxBlocksInAnyCluster - 1;
-  const gapWidth = 3;
-  const totalGapWidth = totalHorizontalGaps * gapWidth;
-  const widthScaleFactor = (availableWidth - totalGapWidth) / maxClusterLogicalWidth;
+  
+  // Define different gap sizes
+  const sameClusterGap = 1; // Smaller gap for blocks in same cluster
+  const differentClusterGap = 6; // Larger gap for blocks in different clusters
 
   let yPos = buttonHeight + 12;
   const clusterPositions = {};
 
-  // Create visualization with context menu
-  Object.entries(blocks).forEach(([key, blockInfo]) => {
-    const [rowCluster, colCluster, blockId, blockType] = key.split(',');
-    const block = blockInfo.data;
-    const columns = blockInfo.columns;
+  // First, group blocks by row and column clusters
+  const groupedBlocks = {};
+  Object.entries(blocks).forEach(([key, value]) => {
+    const [rowCluster, colCluster] = key.split(',');
+    const clusterKey = `${rowCluster},${colCluster}`;
+    if (!groupedBlocks[clusterKey]) {
+      groupedBlocks[clusterKey] = [];
+    }
+    groupedBlocks[clusterKey].push({ key, value });
+  });
+
+  // Then visualize blocks, considering their relationships
+  Object.entries(groupedBlocks).forEach(([clusterKey, blockGroup]) => {
+    const [rowCluster, colCluster] = clusterKey.split(',');
     const scaledHeight = clusterHeights[rowCluster] * heightScaleFactor;
-    const scaledWidth = block[0].length * widthScaleFactor;
 
     if (!clusterPositions[rowCluster]) {
       clusterPositions[rowCluster] = { x: 10, y: yPos };
-      yPos += scaledHeight + 3;
+      yPos += scaledHeight + differentClusterGap; // Use larger gap between different row clusters
     }
 
-    const rect = svg.append('rect')
-      .attr('x', clusterPositions[rowCluster].x)
-      .attr('y', clusterPositions[rowCluster].y)
-      .attr('width', scaledWidth)
-      .attr('height', scaledHeight)
-      .attr('fill', blockType === 'numerical' ? '#fdd49e' : '#4682B4')
-      .attr('data-row-cluster', rowCluster)
-      .attr('data-col-cluster', colCluster)
-      .style('cursor', 'pointer')
-      .on('click', function() {
-        visualizeBlockDetails(block, blockType, columns);
-      })
-      .on('contextmenu', function(event) {
-        event.preventDefault();
-        showContextMenu(event, rowCluster, colCluster);
-      });
+    // Calculate total width for this group to center align blocks
+    const totalGroupWidth = blockGroup.reduce((sum, { value }) => 
+      sum + value.data[0].length * (availableWidth / maxClusterLogicalWidth), 0);
+    
+    let currentX = clusterPositions[rowCluster].x;
+    let isFirstInGroup = true;
 
-    clusterPositions[rowCluster].x += scaledWidth + gapWidth;
+    blockGroup.forEach(({ key, value }) => {
+      const [, , , blockType] = key.split(',');
+      const block = value.data;
+      const scaledWidth = block[0].length * (availableWidth / maxClusterLogicalWidth);
+
+      // Add appropriate gap based on position in group
+      if (!isFirstInGroup) {
+        currentX += sameClusterGap;
+      }
+
+      const rect = svg.append('rect')
+        .attr('x', currentX)
+        .attr('y', clusterPositions[rowCluster].y)
+        .attr('width', scaledWidth)
+        .attr('height', scaledHeight)
+        .attr('fill', blockType === 'numerical' ? '#fdd49e' : '#4682B4')
+        .attr('data-row-cluster', rowCluster)
+        .attr('data-col-cluster', colCluster)
+        .style('cursor', 'pointer')
+        .on('click', function() {
+          visualizeBlockDetails(block, blockType, value.columns);
+        })
+        .on('contextmenu', function(event) {
+          event.preventDefault();
+          showContextMenu(event, rowCluster, colCluster);
+        });
+
+      currentX += scaledWidth;
+      isFirstInGroup = false;
+    });
+
+    // Update x position for next group, adding larger gap
+    clusterPositions[rowCluster].x = currentX + differentClusterGap;
   });
 }
 
