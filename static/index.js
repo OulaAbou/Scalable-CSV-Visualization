@@ -295,38 +295,21 @@ function visualizeGridSummary(data) {
       if (!colorScale) return null;
   
       if (blockType === 'numerical' && colorScale.type === 'numerical') {
-        // For numerical blocks, calculate mean of normalized values
-        let normalizedSum = 0;
+        // Calculate mean value for this column in the block
+        let sum = 0;
         let count = 0;
-        
         block.data.forEach(row => {
           const value = row[colIndex];
           if (!isNaN(value) && value !== '') {
-            // Get the normalized value (between 0 and 1) using the global scale's domain
-            const domain = colorScale.scale.domain();
-            const normalizedValue = (Number(value) - domain[0]) / (domain[1] - domain[0]);
-            normalizedSum += normalizedValue;
+            sum += Number(value);
             count++;
           }
         });
         
-        const meanNormalized = count > 0 ? normalizedSum / count : null;
-        
-        if (meanNormalized !== null) {
-          // Use the normalized mean to interpolate between the color range
-          const range = colorScale.scale.range();
-          const r1 = parseInt(range[0].slice(1, 3), 16);
-          const g1 = parseInt(range[0].slice(3, 5), 16);
-          const b1 = parseInt(range[0].slice(5, 7), 16);
-          const r2 = parseInt(range[1].slice(1, 3), 16);
-          const g2 = parseInt(range[1].slice(3, 5), 16);
-          const b2 = parseInt(range[1].slice(5, 7), 16);
-          
-          const r = Math.round(r1 + meanNormalized * (r2 - r1));
-          const g = Math.round(g1 + meanNormalized * (g2 - g1));
-          const b = Math.round(b1 + meanNormalized * (b2 - b1));
-          
-          return `rgb(${r},${g},${b})`;
+        // If we have valid values, use the global color scale directly
+        if (count > 0) {
+          const mean = sum / count;
+          return colorScale.scale(mean); // Use the global color scale directly
         }
         return null;
       } else if (blockType === 'categorical' && colorScale.type === 'categorical') {
@@ -345,9 +328,8 @@ function visualizeGridSummary(data) {
       return null;
     }).filter(color => color !== null);
   
-    // If we have valid colors, blend them
+    // If we have valid colors, return the first one
     if (columnColors.length > 0) {
-      // Return the color of the first valid column
       return columnColors[0];
     }
     
