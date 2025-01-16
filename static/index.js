@@ -234,7 +234,7 @@ function visualizeGridSummary(data) {
   let yPos = buttonHeight + 12;
   const clusterPositions = {};
 
-  // Group blocks by row and column clusters
+  // Group and sort blocks by row and column clusters
   const groupedBlocks = {};
   Object.entries(blocks).forEach(([key, value]) => {
     const [rowCluster, colCluster] = key.split(',');
@@ -245,49 +245,16 @@ function visualizeGridSummary(data) {
     groupedBlocks[clusterKey].push({ key, value });
   });
 
-  // function getBlockColor(block, blockType, columns) {
-  //   const columnColors = columns.map((col, colIndex) => {
-  //     const colorScale = globalColorScales[col];
-  //     if (!colorScale) return null;
-
-  //     if (blockType === 'numerical' && colorScale.type === 'numerical') {
-  //       // For numerical blocks, calculate mean for this column
-  //       let sum = 0;
-  //       let count = 0;
-  //       block.data.forEach(row => {
-  //         const value = row[colIndex];
-  //         if (!isNaN(value) && value !== '') {
-  //           sum += Number(value);
-  //           count++;
-  //         }
-  //       });
-  //       const mean = count > 0 ? sum / count : null;
-  //       return mean !== null ? colorScale.scale(mean) : null;
-  //     } else if (blockType === 'categorical' && colorScale.type === 'categorical') {
-  //       // For categorical blocks, find most frequent value in this column
-  //       const valueCounts = {};
-  //       block.data.forEach(row => {
-  //         const value = row[colIndex];
-  //         if (value !== '') {
-  //           valueCounts[value] = (valueCounts[value] || 0) + 1;
-  //         }
-  //       });
-  //       const mostFrequent = Object.entries(valueCounts)
-  //         .sort((a, b) => b[1] - a[1])[0];
-  //       return mostFrequent ? colorScale.scale(mostFrequent[0]) : null;
-  //     }
-  //     return null;
-  //   }).filter(color => color !== null);
-
-  //   // If we have valid colors, blend them
-  //   if (columnColors.length > 0) {
-  //     // Return the color of the first valid column
-  //     return columnColors[0];
-  //   }
-    
-  //   // Fallback colors
-  //   return blockType === 'numerical' ? '#fdd49e' : '#a6cee3';
-  // }
+  // Sort blocks within each cluster group to ensure consistent ordering
+  Object.values(groupedBlocks).forEach(blockGroup => {
+    blockGroup.sort((a, b) => {
+      const typeA = a.key.split(',')[3];
+      const typeB = b.key.split(',')[3];
+      // Ensure numerical blocks always come before categorical blocks
+      if (typeA === typeB) return 0;
+      return typeA === 'numerical' ? -1 : 1;
+    });
+  });
 
   function getBlockColor(block, blockType, columns) {
     const columnColors = columns.map((col, colIndex) => {
@@ -295,7 +262,6 @@ function visualizeGridSummary(data) {
       if (!colorScale) return null;
   
       if (blockType === 'numerical' && colorScale.type === 'numerical') {
-        // Calculate mean value for this column in the block
         let sum = 0;
         let count = 0;
         block.data.forEach(row => {
@@ -306,14 +272,12 @@ function visualizeGridSummary(data) {
           }
         });
         
-        // If we have valid values, use the global color scale directly
         if (count > 0) {
           const mean = sum / count;
-          return colorScale.scale(mean); // Use the global color scale directly
+          return colorScale.scale(mean);
         }
         return null;
       } else if (blockType === 'categorical' && colorScale.type === 'categorical') {
-        // For categorical blocks, find most frequent value in this column
         const valueCounts = {};
         block.data.forEach(row => {
           const value = row[colIndex];
@@ -328,12 +292,10 @@ function visualizeGridSummary(data) {
       return null;
     }).filter(color => color !== null);
   
-    // If we have valid colors, return the first one
     if (columnColors.length > 0) {
       return columnColors[0];
     }
     
-    // Fallback colors
     return blockType === 'numerical' ? '#fdd49e' : '#a6cee3';
   }
 
