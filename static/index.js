@@ -351,8 +351,76 @@ function visualizeGridSummary(data) {
   });
 }
 
-// Context menu functions
+// // Context menu functions
+// function showContextMenu(event, rowCluster, colCluster) {
+//   // Remove any existing context menus
+//   d3.selectAll('.context-menu').remove();
+
+//   // Create context menu
+//   const contextMenu = d3.select('body')
+//     .append('div')
+//     .attr('class', 'context-menu')
+//     .style('left', event.pageX + 'px')
+//     .style('top', event.pageY + 'px');
+
+//   // Add menu items
+//   contextMenu.append('div')
+//     .attr('class', 'context-menu-item')
+//     .text('Delete Row Cluster')
+//     .on('click', () => {
+//       deleteRowCluster(rowCluster);
+//       contextMenu.remove();
+//     });
+
+//   contextMenu.append('div')
+//     .attr('class', 'context-menu-item')
+//     .text('Delete Column Cluster')
+//     .on('click', () => {
+//       deleteColumnCluster(colCluster);
+//       contextMenu.remove();
+//     });
+
+//   // Close menu when clicking outside
+//   d3.select('body').on('click.context-menu', function() {
+//     contextMenu.remove();
+//     d3.select('body').on('click.context-menu', null);
+//   });
+// }
+
+// function deleteRowCluster(rowCluster) {
+//   if (gridSummaryData && gridSummaryData.blocks) {
+//     // Filter out blocks with the specified row cluster
+//     const newBlocks = {};
+//     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
+//       if (!key.startsWith(rowCluster + ',')) {
+//         newBlocks[key] = value;
+//       }
+//     });
+//     gridSummaryData.blocks = newBlocks;
+//     visualizeGridSummary(gridSummaryData);
+//   }
+// }
+
+// function deleteColumnCluster(colCluster) {
+//   if (gridSummaryData && gridSummaryData.blocks) {
+//     // Filter out blocks with the specified column cluster
+//     const newBlocks = {};
+//     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
+//       const [row, col] = key.split(',');
+//       if (col !== colCluster) {
+//         newBlocks[key] = value;
+//       }
+//     });
+//     gridSummaryData.blocks = newBlocks;
+//     visualizeGridSummary(gridSummaryData);
+//   }
+// }
+
 function showContextMenu(event, rowCluster, colCluster) {
+  // Get the block type from the clicked element
+  const clickedRect = d3.select(event.target);
+  const blockData = gridSummaryData.blocks[`${rowCluster},${colCluster}`];
+  
   // Remove any existing context menus
   d3.selectAll('.context-menu').remove();
 
@@ -372,11 +440,18 @@ function showContextMenu(event, rowCluster, colCluster) {
       contextMenu.remove();
     });
 
+  // Find the block type of the clicked rectangle
+  const clickedBlockKey = Object.keys(gridSummaryData.blocks).find(key => {
+    const [r, c] = key.split(',');
+    return r === rowCluster && c === colCluster;
+  });
+  const clickedBlockType = clickedBlockKey.split(',')[3];
+
   contextMenu.append('div')
     .attr('class', 'context-menu-item')
-    .text('Delete Column Cluster')
+    .text(`Delete ${clickedBlockType.charAt(0).toUpperCase() + clickedBlockType.slice(1)} Columns`)
     .on('click', () => {
-      deleteColumnCluster(colCluster);
+      deleteColumnClusterByType(colCluster, clickedBlockType);
       contextMenu.remove();
     });
 
@@ -387,12 +462,16 @@ function showContextMenu(event, rowCluster, colCluster) {
   });
 }
 
-function deleteRowCluster(rowCluster) {
+function deleteColumnClusterByType(colCluster, blockType) {
   if (gridSummaryData && gridSummaryData.blocks) {
-    // Filter out blocks with the specified row cluster
+    // Filter out only blocks of the specified type in the specified column cluster
     const newBlocks = {};
     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
-      if (!key.startsWith(rowCluster + ',')) {
+      const [row, col, id, type] = key.split(',');
+      // Keep the block if it's either:
+      // 1. Not in the target column cluster, or
+      // 2. In the target cluster but of a different type
+      if (col !== colCluster || type !== blockType) {
         newBlocks[key] = value;
       }
     });
@@ -401,13 +480,12 @@ function deleteRowCluster(rowCluster) {
   }
 }
 
-function deleteColumnCluster(colCluster) {
+// The original deleteRowCluster function remains unchanged
+function deleteRowCluster(rowCluster) {
   if (gridSummaryData && gridSummaryData.blocks) {
-    // Filter out blocks with the specified column cluster
     const newBlocks = {};
     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
-      const [row, col] = key.split(',');
-      if (col !== colCluster) {
+      if (!key.startsWith(rowCluster + ',')) {
         newBlocks[key] = value;
       }
     });
