@@ -5,6 +5,10 @@ let globalColorScales = null;
 let gridSummaryData = null; // Add this to store the grid summary data
 let vsmData = null;
 let activeFilters = new Map();
+let activeNumericalFilters = {
+  column: null,
+  range: null
+};
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -494,6 +498,8 @@ function visualizeBlockDetails(blockData, blockType, columns) {
 }
 
 function createLegends(colorScales) {
+  console.log('Creating legends with scales:', colorScales);
+  
   // Remove any existing legends
   d3.select('.control-panel').selectAll('.legend-container').remove();
   
@@ -510,6 +516,65 @@ function createLegends(colorScales) {
     .style('font-size', '16px')
     .text('Numerical Values');
 
+  // Get numerical columns for dropdown
+  const numericalColumns = Object.entries(colorScales)
+    .filter(([_, scale]) => scale.type === 'numerical')
+    .map(([column, _]) => column);
+
+  console.log('Numerical columns:', numericalColumns);
+
+  // Add column selector dropdown
+  const dropdownContainer = numericalBox.append('div')
+    .style('margin-bottom', '10px');
+
+  dropdownContainer.append('select')
+    .attr('id', 'numericalColumnSelect')
+    .style('width', '100%')
+    .style('padding', '5px')
+    .style('background-color', '#2c3e50')
+    .style('color', 'white')
+    .style('border', '1px solid #34495e')
+    .style('margin-bottom', '5px')
+    .on('change', function() {
+      const selectedColumn = this.value;
+      console.log('Selected numerical column:', selectedColumn);
+      activeNumericalFilters.column = selectedColumn === 'Select a column...' ? null : selectedColumn;
+      activeNumericalFilters.range = null;
+      if (selectedColumn !== 'Select a column...') {
+        updateNumericalLegend(colorScales[selectedColumn]);
+      }
+    })
+    .selectAll('option')
+    .data(['Select a column...'].concat(numericalColumns))
+    .enter()
+    .append('option')
+    .text(d => d)
+    .property('disabled', d => d === 'Select a column...')
+    .property('selected', d => d === 'Select a column...');
+
+  // Add clear numerical filter button
+  numericalBox.append('button')
+    .attr('id', 'clearNumericalFilter')
+    .style('font-size', '0.8em')
+    .style('padding', '2px 5px')
+    .style('background-color', '#34495e')
+    .style('border', 'none')
+    .style('color', 'white')
+    .style('cursor', 'pointer')
+    .style('display', 'none')
+    .text('Clear Numerical Filter')
+    .on('click', () => {
+      console.log('Clearing numerical filter');
+      activeNumericalFilters.column = null;
+      activeNumericalFilters.range = null;
+      d3.select('#numericalColumnSelect').property('value', 'Select a column...');
+      updateVisualizationsWithFilters();
+      updateNumericalLegendStyles();
+    });
+
+  // Create initial numerical legend
+  createNumericalLegend(numericalBox);
+
   // Create categorical section
   const categoricalBox = legendContainer.append('div')
     .attr('class', 'categorical-legend');
@@ -519,65 +584,14 @@ function createLegends(colorScales) {
     .text('Categorical Values');
 
   // Sort scales
-  const numericalScales = {};
   const categoricalScales = {};
-  Object.entries(colorScales).forEach(([column, colorScale]) => {
-    if (colorScale.type === 'numerical') {
-      numericalScales[column] = colorScale;
-    } else {
-      categoricalScales[column] = colorScale;
+  Object.entries(colorScales).forEach(([column, scale]) => {
+    if (scale.type === 'categorical') {
+      categoricalScales[column] = scale;
     }
   });
 
-  // Add numerical gradient if we have numerical scales
-  if (Object.keys(numericalScales).length > 0) {
-    const referenceScale = Object.values(numericalScales)[0].scale;
-    const colorRange = referenceScale.range();
-    const gradientWidth = 150;
-    const gradientHeight = 15;
-    const labelSpacing = 15;
-
-    const gradientSvg = numericalBox.append('svg')
-      .attr('width', '100%')
-      .attr('height', gradientHeight + labelSpacing * 2)
-      .style('display', 'block');
-
-    const gradient = gradientSvg.append('defs')
-      .append('linearGradient')
-      .attr('id', 'numerical-gradient')
-      .attr('x1', '0%')
-      .attr('x2', '100%');
-
-    gradient.append('stop')
-      .attr('offset', '0%')
-      .attr('stop-color', colorRange[0]);
-
-    gradient.append('stop')
-      .attr('offset', '100%')
-      .attr('stop-color', colorRange[1]);
-
-    gradientSvg.append('rect')
-      .attr('x', 0)
-      .attr('y', labelSpacing)
-      .attr('width', '100%')
-      .attr('height', gradientHeight)
-      .style('fill', 'url(#numerical-gradient)');
-
-    gradientSvg.append('text')
-      .attr('x', 0)
-      .attr('y', labelSpacing - 3)
-      .style('font-size', '0.8em')
-      .style('fill', 'white')
-      .text('Min');
-
-    gradientSvg.append('text')
-      .attr('x', '100%')
-      .attr('y', labelSpacing - 3)
-      .style('font-size', '0.8em')
-      .style('text-anchor', 'end')
-      .style('fill', 'white')
-      .text('Max');
-  }
+  console.log('Categorical scales:', categoricalScales);
 
   // Add interactive categorical legends
   if (Object.keys(categoricalScales).length > 0) {
@@ -598,7 +612,6 @@ function createLegends(colorScales) {
       const schemeContainer = categoricalBox.append('div')
         .attr('class', 'scheme-container');
       
-      // Add column names
       schemeContainer.append('div')
         .style('font-size', '0.8em')
         .style('margin-bottom', '3px')
@@ -617,6 +630,7 @@ function createLegends(colorScales) {
         .style('display', 'none')
         .text('Clear Filters')
         .on('click', () => {
+          console.log('Clearing categorical filters for columns:', schemeInfo.columns);
           schemeInfo.columns.forEach(column => {
             activeFilters.delete(column);
           });
@@ -629,7 +643,7 @@ function createLegends(colorScales) {
         .style('flex-direction', 'column')
         .style('gap', '5px');
 
-      // Add interactive swatches for domain values
+      // Add interactive swatches
       schemeInfo.scale.domain().forEach((value) => {
         const swatchRow = swatchContainer.append('div')
           .style('display', 'flex')
@@ -637,6 +651,7 @@ function createLegends(colorScales) {
           .style('gap', '5px')
           .style('cursor', 'pointer')
           .on('click', () => {
+            console.log('Clicked categorical value:', value);
             schemeInfo.columns.forEach(column => {
               if (!activeFilters.has(column)) {
                 activeFilters.set(column, new Set([value]));
@@ -652,6 +667,7 @@ function createLegends(colorScales) {
                 }
               }
             });
+            console.log('Active filters after click:', Array.from(activeFilters.entries()));
             updateVisualizationsWithFilters();
             updateLegendStyles();
           });
@@ -708,6 +724,204 @@ function createLegends(colorScales) {
   }
 }
 
+function createNumericalLegend(container) {
+  const gradientHeight = 15;
+  const labelSpacing = 15;
+
+  const gradientSvg = container.append('svg')
+    .attr('id', 'numericalGradient')
+    .attr('width', '100%')
+    .attr('height', gradientHeight + labelSpacing * 2)
+    .style('display', 'block');
+
+  // Create initial gradient
+  const gradient = gradientSvg.append('defs')
+    .append('linearGradient')
+    .attr('id', 'numerical-gradient')
+    .attr('x1', '0%')
+    .attr('x2', '100%');
+
+  gradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', '#fdd49e');
+
+  gradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', '#7f0000');
+
+  // Create interactive gradient rect
+  gradientSvg.append('rect')
+    .attr('x', 0)
+    .attr('y', labelSpacing)
+    .attr('width', '100%')
+    .attr('height', gradientHeight)
+    .style('fill', 'url(#numerical-gradient)')
+    .style('cursor', 'pointer')
+    .on('click', function(event) {
+      if (!activeNumericalFilters.column) return;
+      
+      const bbox = this.getBoundingClientRect();
+      const x = event.clientX - bbox.left;
+      const percentage = x / bbox.width;
+      
+      const scale = globalColorScales[activeNumericalFilters.column].scale;
+      const domain = scale.domain();
+      const selectedValue = domain[0] + (domain[1] - domain[0]) * percentage;
+      
+      // Define range around clicked value
+      const rangeSize = (domain[1] - domain[0]) * 0.1; // 10% of total range
+      activeNumericalFilters.range = [
+        selectedValue - rangeSize,
+        selectedValue + rangeSize
+      ];
+      
+      console.log('Selected numerical range:', activeNumericalFilters.range);
+      updateVisualizationsWithFilters();
+      updateNumericalLegendStyles();
+    });
+
+  // Add labels
+  gradientSvg.append('text')
+    .attr('class', 'min-value')
+    .attr('x', 0)
+    .attr('y', labelSpacing - 3)
+    .style('font-size', '0.8em')
+    .style('fill', 'white')
+    .text('Min');
+
+  gradientSvg.append('text')
+    .attr('class', 'max-value')
+    .attr('x', '100%')
+    .attr('y', labelSpacing - 3)
+    .style('font-size', '0.8em')
+    .style('text-anchor', 'end')
+    .style('fill', 'white')
+    .text('Max');
+}
+
+function updateVisualizationsWithFilters() {
+  if (!csvFileData) return;
+
+  console.log('Updating visualizations with filters');
+  console.log('Active categorical filters:', Array.from(activeFilters.entries()));
+  console.log('Active numerical filters:', activeNumericalFilters);
+
+  const data = d3.csvParse(csvFileData);
+  
+  const filteredData = data.filter(row => {
+    // Check categorical filters
+    const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
+      const rowValue = row[column];
+      const colorScale = globalColorScales[column];
+      const isDomainValue = colorScale.scale.domain().includes(rowValue);
+      
+      return values.has(rowValue) || 
+             (values.has('OTHER') && !isDomainValue);
+    });
+    
+    // Check numerical filter if active
+    let numericalMatch = true;
+    if (activeNumericalFilters.column && activeNumericalFilters.range) {
+      const value = +row[activeNumericalFilters.column];
+      numericalMatch = value >= activeNumericalFilters.range[0] && 
+                      value <= activeNumericalFilters.range[1];
+    }
+    
+    return (activeFilters.size === 0 || categoricalMatch) && 
+           (!activeNumericalFilters.range || numericalMatch);
+  });
+
+  console.log(`Filtered from ${data.length} to ${filteredData.length} rows`);
+
+  // Convert filtered data back to CSV
+  const filteredCsvData = d3.csvFormat(filteredData);
+
+  // Update visualizations
+  visualizeCSVData(filteredCsvData);
+  
+  // Update grid summary if active
+  if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+    const formData = new FormData();
+    const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
+    formData.append('file', filteredBlob, 'filtered.csv');
+    formData.append('rowClusters', document.getElementById('rowClusters').value);
+    formData.append('colClusters', document.getElementById('colClusters').value);
+
+    fetch('/get_clusters', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.error) {
+        visualizeGridSummary(data);
+      }
+    })
+    .catch(error => console.error('Error:', error));
+  }
+}
+
+function updateNumericalLegendStyles() {
+  const hasFilter = activeNumericalFilters.column && activeNumericalFilters.range;
+  
+  // Show/hide clear button
+  d3.select('#clearNumericalFilter')
+    .style('display', hasFilter ? 'block' : 'none');
+  
+  // Update gradient opacity
+  d3.select('#numericalGradient rect')
+    .style('opacity', hasFilter ? 0.5 : 1);
+  
+  if (hasFilter) {
+    // Add range indicator
+    const scale = globalColorScales[activeNumericalFilters.column].scale;
+    const domain = scale.domain();
+    const range = activeNumericalFilters.range;
+    
+    // Calculate positions for range indicator
+    const x1 = (range[0] - domain[0]) / (domain[1] - domain[0]) * 100;
+    const x2 = (range[1] - domain[0]) / (domain[1] - domain[0]) * 100;
+    
+    // Add or update range indicator
+    const gradientSvg = d3.select('#numericalGradient');
+    gradientSvg.selectAll('.range-indicator').remove();
+    
+    gradientSvg.append('rect')
+      .attr('class', 'range-indicator')
+      .attr('x', `${x1}%`)
+      .attr('y', 15)
+      .attr('width', `${x2 - x1}%`)
+      .attr('height', 15)
+      .style('fill', 'none')
+      .style('stroke', 'white')
+      .style('stroke-width', '2px');
+  } else {
+    // Remove range indicator
+    d3.select('#numericalGradient').selectAll('.range-indicator').remove();
+  }
+}
+
+function updateNumericalLegend(colorScale) {
+  const domain = colorScale.scale.domain();
+  const gradientSvg = d3.select('#numericalGradient');
+  
+  // Update labels
+  gradientSvg.select('.min-value').text(domain[0].toFixed(1));
+  gradientSvg.select('.max-value').text(domain[1].toFixed(1));
+  
+  // Update gradient colors
+  const gradient = d3.select('#numerical-gradient');
+  gradient.selectAll('stop').remove();
+  
+  gradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', colorScale.scale(domain[0]));
+
+  gradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', colorScale.scale(domain[1]));
+}
+
 function updateLegendStyles() {
   // Update swatch styles based on active filters
   d3.selectAll('.scheme-container').each(function() {
@@ -741,14 +955,24 @@ function updateVisualizationsWithFilters() {
 
   const data = d3.csvParse(csvFileData);
   
-  // Filter the data based on active filters
+  // Filter the data based on both categorical and numerical filters
   const filteredData = data.filter(row => {
-    return Array.from(activeFilters.entries()).every(([column, values]) => {
+    // Check categorical filters
+    const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
       const rowValue = row[column];
-      // Check if the value is in the filter set, or if it's "OTHER" and the value isn't in the color scale domain
       return values.has(rowValue) || 
              (values.has('OTHER') && !globalColorScales[column].scale.domain().includes(rowValue));
     });
+    
+    // Check numerical filter if active
+    let numericalMatch = true;
+    if (activeNumericalFilters.column && activeNumericalFilters.range) {
+      const value = +row[activeNumericalFilters.column];
+      numericalMatch = value >= activeNumericalFilters.range[0] && 
+                      value <= activeNumericalFilters.range[1];
+    }
+    
+    return categoricalMatch && numericalMatch;
   });
 
   // Convert filtered data back to CSV
@@ -757,7 +981,7 @@ function updateVisualizationsWithFilters() {
   // Update visualizations with filtered data
   visualizeCSVData(filteredCsvData);
   
-  // If grid summary exists, recalculate it with filtered data
+  // Update grid summary if active
   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
     const formData = new FormData();
     const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
@@ -777,8 +1001,11 @@ function updateVisualizationsWithFilters() {
     })
     .catch(error => console.error('Error:', error));
   }
+  
+  // Update both legend styles
+  updateLegendStyles();
+  updateNumericalLegendStyles();
 }
-
 async function fetchVSMData(csvData) {
   const formData = new FormData();
   formData.append('file', file);
