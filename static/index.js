@@ -53,45 +53,6 @@ function generateColorScales(data) {
   return colorScales;
 }
 
-// Modify the file input handler to create legends when data is loaded
-// document.getElementById('csvFileInput').addEventListener('change', async function(event) {
-//   file = event.target.files[0];
-//   if (file) {
-//     try {
-//       const reader = new FileReader();
-      
-//       reader.onload = function(e) {
-//         csvFileData = e.target.result;
-//         try {
-//           const data = d3.csvParse(csvFileData);
-//           globalColorScales = generateColorScales(data);
-          
-//           document.querySelector('.search-tab label').innerHTML = 
-//             '<span class="magnifier-icon">&#128269;</span>' + file.name;
-          
-//           // Create legends after generating color scales
-//           createLegends(globalColorScales);
-          
-//           visualizeCSVData(csvFileData);
-//         } catch (error) {
-//           console.error('Error processing CSV:', error);
-//           alert('Error processing CSV file. Please check the file format.');
-//         }
-//       };
-
-//       reader.onerror = function() {
-//         console.error('Error reading file');
-//         alert('Error reading the file. Please try again.');
-//       };
-
-//       reader.readAsText(file);
-//     } catch (error) {
-//       console.error('Error handling file:', error);
-//       alert('Error handling the file. Please try again.');
-//     }
-//   }
-// });
-
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
