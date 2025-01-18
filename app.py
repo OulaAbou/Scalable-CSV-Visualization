@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 import pandas as pd
 from biclustering import MixedTypeBiclustering
+from similarity_matrix_mixed_clustering import OptimizedDualSimilarityMatrix
 
 app = Flask(__name__)
 
@@ -42,6 +43,38 @@ def get_clusters():
         }
 
         return jsonify({'blocks': blocks_serializable})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
+# Add this new route to your app.py file
+
+@app.route('/get_vsm', methods=['POST'])
+def get_vsm():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    try:
+        # Read the CSV file
+        data = pd.read_csv(file)
+        
+        # Create VSM instance
+        vsm = OptimizedDualSimilarityMatrix(data)
+        
+        # Get similarity matrices
+        row_similarity, col_similarity = vsm.get_similarity_matrices()
+        
+        # Convert numpy arrays to lists for JSON serialization
+        response_data = {
+            'row_similarity': row_similarity.tolist(),
+            'column_similarity': col_similarity.tolist()
+        }
+        
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

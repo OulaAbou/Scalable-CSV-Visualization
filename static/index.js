@@ -3,6 +3,7 @@ let file = null;
 let csvFileData = null;
 let globalColorScales = null;
 let gridSummaryData = null; // Add this to store the grid summary data
+let vsmData = null;
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -53,13 +54,51 @@ function generateColorScales(data) {
 }
 
 // Modify the file input handler to create legends when data is loaded
+// document.getElementById('csvFileInput').addEventListener('change', async function(event) {
+//   file = event.target.files[0];
+//   if (file) {
+//     try {
+//       const reader = new FileReader();
+      
+//       reader.onload = function(e) {
+//         csvFileData = e.target.result;
+//         try {
+//           const data = d3.csvParse(csvFileData);
+//           globalColorScales = generateColorScales(data);
+          
+//           document.querySelector('.search-tab label').innerHTML = 
+//             '<span class="magnifier-icon">&#128269;</span>' + file.name;
+          
+//           // Create legends after generating color scales
+//           createLegends(globalColorScales);
+          
+//           visualizeCSVData(csvFileData);
+//         } catch (error) {
+//           console.error('Error processing CSV:', error);
+//           alert('Error processing CSV file. Please check the file format.');
+//         }
+//       };
+
+//       reader.onerror = function() {
+//         console.error('Error reading file');
+//         alert('Error reading the file. Please try again.');
+//       };
+
+//       reader.readAsText(file);
+//     } catch (error) {
+//       console.error('Error handling file:', error);
+//       alert('Error handling the file. Please try again.');
+//     }
+//   }
+// });
+
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
     try {
       const reader = new FileReader();
       
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         csvFileData = e.target.result;
         try {
           const data = d3.csvParse(csvFileData);
@@ -68,10 +107,11 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
           document.querySelector('.search-tab label').innerHTML = 
             '<span class="magnifier-icon">&#128269;</span>' + file.name;
           
-          // Create legends after generating color scales
           createLegends(globalColorScales);
-          
           visualizeCSVData(csvFileData);
+          
+          // Fetch VSM data from backend
+          await fetchVSMData(csvFileData);
         } catch (error) {
           console.error('Error processing CSV:', error);
           alert('Error processing CSV file. Please check the file format.');
@@ -350,71 +390,6 @@ function visualizeGridSummary(data) {
     clusterPositions[rowCluster].x = currentX + differentClusterGap;
   });
 }
-
-// // Context menu functions
-// function showContextMenu(event, rowCluster, colCluster) {
-//   // Remove any existing context menus
-//   d3.selectAll('.context-menu').remove();
-
-//   // Create context menu
-//   const contextMenu = d3.select('body')
-//     .append('div')
-//     .attr('class', 'context-menu')
-//     .style('left', event.pageX + 'px')
-//     .style('top', event.pageY + 'px');
-
-//   // Add menu items
-//   contextMenu.append('div')
-//     .attr('class', 'context-menu-item')
-//     .text('Delete Row Cluster')
-//     .on('click', () => {
-//       deleteRowCluster(rowCluster);
-//       contextMenu.remove();
-//     });
-
-//   contextMenu.append('div')
-//     .attr('class', 'context-menu-item')
-//     .text('Delete Column Cluster')
-//     .on('click', () => {
-//       deleteColumnCluster(colCluster);
-//       contextMenu.remove();
-//     });
-
-//   // Close menu when clicking outside
-//   d3.select('body').on('click.context-menu', function() {
-//     contextMenu.remove();
-//     d3.select('body').on('click.context-menu', null);
-//   });
-// }
-
-// function deleteRowCluster(rowCluster) {
-//   if (gridSummaryData && gridSummaryData.blocks) {
-//     // Filter out blocks with the specified row cluster
-//     const newBlocks = {};
-//     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
-//       if (!key.startsWith(rowCluster + ',')) {
-//         newBlocks[key] = value;
-//       }
-//     });
-//     gridSummaryData.blocks = newBlocks;
-//     visualizeGridSummary(gridSummaryData);
-//   }
-// }
-
-// function deleteColumnCluster(colCluster) {
-//   if (gridSummaryData && gridSummaryData.blocks) {
-//     // Filter out blocks with the specified column cluster
-//     const newBlocks = {};
-//     Object.entries(gridSummaryData.blocks).forEach(([key, value]) => {
-//       const [row, col] = key.split(',');
-//       if (col !== colCluster) {
-//         newBlocks[key] = value;
-//       }
-//     });
-//     gridSummaryData.blocks = newBlocks;
-//     visualizeGridSummary(gridSummaryData);
-//   }
-// }
 
 function showContextMenu(event, rowCluster, colCluster) {
   // Get the block type from the clicked element
@@ -705,3 +680,72 @@ function createLegends(colorScales) {
     });
   }
 }
+
+
+async function fetchVSMData(csvData) {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const response = await fetch('/get_vsm', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    vsmData = data;
+    updateVSMVisualization();
+  } catch (error) {
+    console.error('Error fetching VSM data:', error);
+  }
+}
+
+// Update VSM visualization based on selected type
+function updateVSMVisualization() {
+  if (!vsmData) return;
+
+  const vsmType = document.getElementById('vsmType').value;
+  const container = document.getElementById('vsmCanvas');
+  
+  // Clear previous visualization
+  d3.select(container).selectAll('svg').remove();
+
+  // Get similarity matrix based on selected type
+  const matrix = vsmType === 'columns' ? vsmData.column_similarity : vsmData.row_similarity;
+
+  // Create SVG
+  const margin = 5;
+  const containerRect = container.getBoundingClientRect();
+  const size = Math.min(containerRect.width, containerRect.height) - (margin * 2);
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', size)
+    .attr('height', size);
+
+  // Create color scale
+  const colorScale = d3.scaleLinear()
+    .domain([0, 1])
+    .range(['#fff', '#2c3e50']);
+
+  // Draw cells
+  const cellSize = size / matrix.length;
+  
+  matrix.forEach((row, i) => {
+    row.forEach((value, j) => {
+      svg.append('rect')
+        .attr('x', j * cellSize)
+        .attr('y', i * cellSize)
+        .attr('width', cellSize)
+        .attr('height', cellSize)
+        .attr('fill', colorScale(value));
+    });
+  });
+}
+
+// Add event listener for VSM type selection
+document.getElementById('vsmType').addEventListener('change', updateVSMVisualization);
