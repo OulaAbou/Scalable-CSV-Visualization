@@ -4,6 +4,7 @@ let csvFileData = null;
 let globalColorScales = null;
 let gridSummaryData = null; // Add this to store the grid summary data
 let vsmData = null;
+let activeFilters = new Map();
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -578,7 +579,7 @@ function createLegends(colorScales) {
       .text('Max');
   }
 
-  // Add categorical legends
+  // Add interactive categorical legends
   if (Object.keys(categoricalScales).length > 0) {
     const uniqueSchemes = new Map();
     Object.entries(categoricalScales).forEach(([column, scale]) => {
@@ -594,30 +595,73 @@ function createLegends(colorScales) {
     });
 
     uniqueSchemes.forEach((schemeInfo, schemeKey) => {
-      const schemeContainer = categoricalBox.append('div');
+      const schemeContainer = categoricalBox.append('div')
+        .attr('class', 'scheme-container');
       
+      // Add column names
       schemeContainer.append('div')
         .style('font-size', '0.8em')
         .style('margin-bottom', '3px')
         .style('color', '#bdc3c7')
         .text(`Columns: ${schemeInfo.columns.join(', ')}`);
 
+      // Add clear filters button
+      const clearButton = schemeContainer.append('button')
+        .style('font-size', '0.8em')
+        .style('margin-bottom', '5px')
+        .style('padding', '2px 5px')
+        .style('background-color', '#34495e')
+        .style('border', 'none')
+        .style('color', 'white')
+        .style('cursor', 'pointer')
+        .style('display', 'none')
+        .text('Clear Filters')
+        .on('click', () => {
+          schemeInfo.columns.forEach(column => {
+            activeFilters.delete(column);
+          });
+          updateVisualizationsWithFilters();
+          updateLegendStyles();
+        });
+
       const swatchContainer = schemeContainer.append('div')
         .style('display', 'flex')
         .style('flex-direction', 'column')
         .style('gap', '5px');
 
-      // Add swatches for domain values
+      // Add interactive swatches for domain values
       schemeInfo.scale.domain().forEach((value) => {
         const swatchRow = swatchContainer.append('div')
           .style('display', 'flex')
           .style('align-items', 'center')
-          .style('gap', '5px');
+          .style('gap', '5px')
+          .style('cursor', 'pointer')
+          .on('click', () => {
+            schemeInfo.columns.forEach(column => {
+              if (!activeFilters.has(column)) {
+                activeFilters.set(column, new Set([value]));
+              } else {
+                const columnFilters = activeFilters.get(column);
+                if (columnFilters.has(value)) {
+                  columnFilters.delete(value);
+                  if (columnFilters.size === 0) {
+                    activeFilters.delete(column);
+                  }
+                } else {
+                  columnFilters.add(value);
+                }
+              }
+            });
+            updateVisualizationsWithFilters();
+            updateLegendStyles();
+          });
 
         swatchRow.append('div')
+          .attr('class', 'color-swatch')
           .style('width', '15px')
           .style('height', '15px')
-          .style('background-color', schemeInfo.scale(value));
+          .style('background-color', schemeInfo.scale(value))
+          .style('border', '1px solid transparent');
 
         swatchRow.append('span')
           .style('font-size', '0.8em')
@@ -628,12 +672,34 @@ function createLegends(colorScales) {
       const otherRow = swatchContainer.append('div')
         .style('display', 'flex')
         .style('align-items', 'center')
-        .style('gap', '5px');
+        .style('gap', '5px')
+        .style('cursor', 'pointer')
+        .on('click', () => {
+          schemeInfo.columns.forEach(column => {
+            if (!activeFilters.has(column)) {
+              activeFilters.set(column, new Set(['OTHER']));
+            } else {
+              const columnFilters = activeFilters.get(column);
+              if (columnFilters.has('OTHER')) {
+                columnFilters.delete('OTHER');
+                if (columnFilters.size === 0) {
+                  activeFilters.delete(column);
+                }
+              } else {
+                columnFilters.add('OTHER');
+              }
+            }
+          });
+          updateVisualizationsWithFilters();
+          updateLegendStyles();
+        });
 
       otherRow.append('div')
+        .attr('class', 'color-swatch')
         .style('width', '15px')
         .style('height', '15px')
-        .style('background-color', schemeInfo.scale.unknown());
+        .style('background-color', schemeInfo.scale.unknown())
+        .style('border', '1px solid transparent');
 
       otherRow.append('span')
         .style('font-size', '0.8em')
@@ -642,6 +708,76 @@ function createLegends(colorScales) {
   }
 }
 
+function updateLegendStyles() {
+  // Update swatch styles based on active filters
+  d3.selectAll('.scheme-container').each(function() {
+    const container = d3.select(this);
+    const columnText = container.select('div').text();
+    const columns = columnText.replace('Columns: ', '').split(', ');
+    
+    // Show/hide clear button
+    const hasActiveFilters = columns.some(column => activeFilters.has(column));
+    container.select('button')
+      .style('display', hasActiveFilters ? 'block' : 'none');
+
+    // Update swatch styles
+    container.selectAll('.color-swatch').each(function(_, i) {
+      const swatch = d3.select(this);
+      const value = d3.select(this.parentNode).select('span').text();
+      const isSelected = columns.some(column => 
+        activeFilters.has(column) && 
+        activeFilters.get(column).has(value === 'Other' ? 'OTHER' : value)
+      );
+
+      swatch
+        .style('border', isSelected ? '2px solid white' : '1px solid transparent')
+        .style('opacity', hasActiveFilters && !isSelected ? 0.5 : 1);
+    });
+  });
+}
+
+function updateVisualizationsWithFilters() {
+  if (!csvFileData) return;
+
+  const data = d3.csvParse(csvFileData);
+  
+  // Filter the data based on active filters
+  const filteredData = data.filter(row => {
+    return Array.from(activeFilters.entries()).every(([column, values]) => {
+      const rowValue = row[column];
+      // Check if the value is in the filter set, or if it's "OTHER" and the value isn't in the color scale domain
+      return values.has(rowValue) || 
+             (values.has('OTHER') && !globalColorScales[column].scale.domain().includes(rowValue));
+    });
+  });
+
+  // Convert filtered data back to CSV
+  const filteredCsvData = d3.csvFormat(filteredData);
+
+  // Update visualizations with filtered data
+  visualizeCSVData(filteredCsvData);
+  
+  // If grid summary exists, recalculate it with filtered data
+  if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+    const formData = new FormData();
+    const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
+    formData.append('file', filteredBlob, 'filtered.csv');
+    formData.append('rowClusters', document.getElementById('rowClusters').value);
+    formData.append('colClusters', document.getElementById('colClusters').value);
+
+    fetch('/get_clusters', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.error) {
+        visualizeGridSummary(data);
+      }
+    })
+    .catch(error => console.error('Error:', error));
+  }
+}
 
 async function fetchVSMData(csvData) {
   const formData = new FormData();
