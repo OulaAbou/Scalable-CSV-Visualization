@@ -10,5 +10,5 @@ columns_names = ['ID', 'Diagnosis', 'radius1', 'texture1', 'perimeter1', 'area1'
 
 # Load data
 data = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv', names=columns_names)
-# data = data.drop(columns=['ID'])
+data = data.drop(columns=['ID'])
 data.to_csv('breast+cancer+wisconsin+diagnostic/wdbc_withHeaders.csv', index=False)
