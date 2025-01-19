@@ -9,6 +9,8 @@ let activeNumericalFilters = {
   column: null,
   range: null
 };
+let selectedColumns = new Set(); // Store selected column names
+let allColumns = []; // Store all column names
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -58,6 +60,7 @@ function generateColorScales(data) {
   return colorScales;
 }
 
+
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
@@ -68,6 +71,7 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
         csvFileData = e.target.result;
         try {
           const data = d3.csvParse(csvFileData);
+          createColumnSelector(data.columns); // Add this line
           globalColorScales = generateColorScales(data);
           
           document.querySelector('.search-tab label').innerHTML = 
@@ -76,17 +80,11 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
           createLegends(globalColorScales);
           visualizeCSVData(csvFileData);
           
-          // Fetch VSM data from backend
           await fetchVSMData(csvFileData);
         } catch (error) {
           console.error('Error processing CSV:', error);
           alert('Error processing CSV file. Please check the file format.');
         }
-      };
-
-      reader.onerror = function() {
-        console.error('Error reading file');
-        alert('Error reading the file. Please try again.');
       };
 
       reader.readAsText(file);
@@ -981,50 +979,26 @@ function updateNumericalLegend(colorScale) {
     .style('right', '0%');
 }
 
-function updateVisualizationsWithFilters() {
+
+function updateVisualizationsWithColumnFilter() {
   if (!csvFileData) return;
-
-  console.log('Updating visualizations with filters');
-  console.log('Active categorical filters:', Array.from(activeFilters.entries()));
-  console.log('Active numerical filters:', activeNumericalFilters);
-
-  const data = d3.csvParse(csvFileData);
   
-  const filteredData = data.filter(row => {
-    // Check categorical filters
-    const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
-      const rowValue = row[column];
-      const colorScale = globalColorScales[column];
-      const isDomainValue = colorScale.scale.domain().includes(rowValue);
-      
-      return values.has(rowValue) || 
-             (values.has('OTHER') && !isDomainValue);
-    });
-    
-    // Check numerical filter if active
-    let numericalMatch = true;
-    if (activeNumericalFilters.column && activeNumericalFilters.range) {
-      const value = +row[activeNumericalFilters.column];
-      numericalMatch = value >= activeNumericalFilters.range[0] && 
-                      value <= activeNumericalFilters.range[1];
-    }
-    
-    return (activeFilters.size === 0 || categoricalMatch) && 
-           (!activeNumericalFilters.range || numericalMatch);
-  });
-
-  console.log(`Filtered from ${data.length} to ${filteredData.length} rows`);
-
-  // Convert filtered data back to CSV
-  const filteredCsvData = d3.csvFormat(filteredData);
-
+  const filteredCSV = filterCSVByColumns(csvFileData);
+  
+  // Update color scales for the filtered columns
+  const filteredData = d3.csvParse(filteredCSV);
+  globalColorScales = generateColorScales(filteredData);
+  
+  // Update legends
+  createLegends(globalColorScales);
+  
   // Update visualizations
-  visualizeCSVData(filteredCsvData);
+  visualizeCSVData(filteredCSV);
   
   // Update grid summary if active
   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
     const formData = new FormData();
-    const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
+    const filteredBlob = new Blob([filteredCSV], { type: 'text/csv' });
     formData.append('file', filteredBlob, 'filtered.csv');
     formData.append('rowClusters', document.getElementById('rowClusters').value);
     formData.append('colClusters', document.getElementById('colClusters').value);
@@ -1041,6 +1015,22 @@ function updateVisualizationsWithFilters() {
     })
     .catch(error => console.error('Error:', error));
   }
+  
+  // Update VSM
+  const formData = new FormData();
+  const filteredBlob = new Blob([filteredCSV], { type: 'text/csv' });
+  formData.append('file', filteredBlob);
+  
+  fetch('/get_vsm', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    vsmData = data;
+    updateVSMVisualization();
+  })
+  .catch(error => console.error('Error fetching VSM data:', error));
 }
 
 function updateNumericalLegendStyles() {
@@ -1188,6 +1178,126 @@ async function fetchVSMData(csvData) {
     console.error('Error fetching VSM data:', error);
   }
 }
+
+// Add this function to create the column selector
+function createColumnSelector(columns) {
+  allColumns = columns;
+  selectedColumns = new Set(columns); // Initially select all columns
+  
+  const controlPanel = document.querySelector('.control-panel');
+  const legendContainer = document.querySelector('.legend-container');
+  
+  // Create column selector container
+  const selectorContainer = document.createElement('div');
+  selectorContainer.className = 'column-selector';
+  selectorContainer.style.backgroundColor = '#34495e';
+  selectorContainer.style.padding = '10px';
+  selectorContainer.style.borderRadius = '5px';
+  selectorContainer.style.marginTop = '20px';
+  
+  // Add header
+  const header = document.createElement('h3');
+  header.textContent = 'Column Selection';
+  header.style.fontSize = '16px';
+  header.style.marginBottom = '10px';
+  selectorContainer.appendChild(header);
+
+  // Add select/deselect all buttons
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.marginBottom = '10px';
+  buttonContainer.style.display = 'flex';
+  buttonContainer.style.gap = '10px';
+
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.textContent = 'Select All';
+  selectAllBtn.style.padding = '5px 10px';
+  selectAllBtn.style.backgroundColor = '#2c3e50';
+  selectAllBtn.style.border = '1px solid #34495e';
+  selectAllBtn.style.color = 'white';
+  selectAllBtn.style.borderRadius = '3px';
+  selectAllBtn.style.cursor = 'pointer';
+  selectAllBtn.onclick = () => {
+    checkboxes.forEach(cb => {
+      cb.checked = true;
+      selectedColumns.add(cb.value);
+    });
+    updateVisualizationsWithColumnFilter();
+  };
+
+  const deselectAllBtn = document.createElement('button');
+  deselectAllBtn.textContent = 'Deselect All';
+  deselectAllBtn.style.padding = '5px 10px';
+  deselectAllBtn.style.backgroundColor = '#2c3e50';
+  deselectAllBtn.style.border = '1px solid #34495e';
+  deselectAllBtn.style.color = 'white';
+  deselectAllBtn.style.borderRadius = '3px';
+  deselectAllBtn.style.cursor = 'pointer';
+  deselectAllBtn.onclick = () => {
+    checkboxes.forEach(cb => {
+      cb.checked = false;
+      selectedColumns.delete(cb.value);
+    });
+    updateVisualizationsWithColumnFilter();
+  };
+
+  buttonContainer.appendChild(selectAllBtn);
+  buttonContainer.appendChild(deselectAllBtn);
+  selectorContainer.appendChild(buttonContainer);
+
+  // Create scrollable checkbox container
+  const checkboxContainer = document.createElement('div');
+  checkboxContainer.style.maxHeight = '150px';
+  checkboxContainer.style.overflowY = 'auto';
+  checkboxContainer.style.padding = '5px';
+  checkboxContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+  checkboxContainer.style.borderRadius = '3px';
+
+  // Create checkboxes for each column
+  const checkboxes = columns.map(column => {
+    const label = document.createElement('label');
+    label.style.display = 'block';
+    label.style.padding = '3px 0';
+    label.style.cursor = 'pointer';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = column;
+    checkbox.checked = true;
+    checkbox.style.marginRight = '8px';
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        selectedColumns.add(column);
+      } else {
+        selectedColumns.delete(column);
+      }
+      updateVisualizationsWithColumnFilter();
+    });
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(column));
+    checkboxContainer.appendChild(label);
+    return checkbox;
+  });
+
+  selectorContainer.appendChild(checkboxContainer);
+  
+  // Insert the column selector before the legend container
+  controlPanel.insertBefore(selectorContainer, legendContainer);
+}
+
+// Add this function to filter CSV data based on selected columns
+function filterCSVByColumns(csvData) {
+  const data = d3.csvParse(csvData);
+  const filteredData = data.map(row => {
+    const filteredRow = {};
+    selectedColumns.forEach(column => {
+      filteredRow[column] = row[column];
+    });
+    return filteredRow;
+  });
+  return d3.csvFormat(filteredData);
+}
+
 
 // Update VSM visualization based on selected type
 function updateVSMVisualization() {
