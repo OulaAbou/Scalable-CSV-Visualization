@@ -17,42 +17,68 @@ document.querySelector('.search-tab').addEventListener('click', function() {
   document.getElementById('csvFileInput').click();
 });
 
-// Function to generate color scales for all columns
 function generateColorScales(data) {
-  const columns = data.columns;
+  if (!data || !data.columns) {
+    console.error('Invalid data provided to generateColorScales');
+    return {};
+  }
+
   const colorScales = {};
+  const columns = data.columns;
 
   columns.forEach(col => {
-    const values = data.map(row => row[col]);
-    const isNumeric = values.every(value => !isNaN(value) && value !== '');
+    try {
+      const values = data.map(row => row[col]).filter(value => value !== null && value !== '');
+      
+      // Check if we have any valid values
+      if (values.length === 0) {
+        console.warn(`No valid values found for column: ${col}`);
+        colorScales[col] = {
+          type: 'categorical',
+          scale: d3.scaleOrdinal().range(['#cccccc'])
+        };
+        return;
+      }
 
-    if (isNumeric) {
-      const numericValues = values.map(Number);
-      const min = d3.min(numericValues);
-      const max = d3.max(numericValues);
-      colorScales[col] = {
-        type: 'numerical',
-        scale: d3.scaleLinear()
-          .domain([min, max])
-          .range(['#fdd49e', '#7f0000'])
-      };
-    } else {
-      const valueCounts = values.reduce((acc, value) => {
-        acc[value] = (acc[value] || 0) + 1;
-        return acc;
-      }, {});
+      const isNumeric = values.every(value => !isNaN(value));
 
-      const topValues = Object.entries(valueCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4)
-        .map(d => d[0]);
+      if (isNumeric) {
+        const numericValues = values.map(Number);
+        const min = d3.min(numericValues);
+        const max = d3.max(numericValues);
+        
+        colorScales[col] = {
+          type: 'numerical',
+          scale: d3.scaleLinear()
+            .domain([min, max])
+            .range(['#fdd49e', '#7f0000'])
+            .clamp(true) // Clamp values outside the domain
+        };
+      } else {
+        const valueCounts = values.reduce((acc, value) => {
+          acc[value] = (acc[value] || 0) + 1;
+          return acc;
+        }, {});
 
+        const topValues = Object.entries(valueCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(d => d[0]);
+
+        colorScales[col] = {
+          type: 'categorical',
+          scale: d3.scaleOrdinal()
+            .domain(topValues)
+            .range(['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'])
+            .unknown('#cccccc')
+        };
+      }
+    } catch (error) {
+      console.error(`Error generating color scale for column ${col}:`, error);
+      // Provide a fallback color scale
       colorScales[col] = {
         type: 'categorical',
-        scale: d3.scaleOrdinal()
-          .domain(topValues)
-          .range(['#a6cee3', '#1f78b4', '#b2df8a', '#33a02c'])
-          .unknown('gray')
+        scale: d3.scaleOrdinal().range(['#cccccc'])
       };
     }
   });
@@ -142,56 +168,103 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-// Full Grid visualization function
 function visualizeCSVData(csvData) {
-  const data = d3.csvParse(csvData);
-  const rectSize = 8;
-  const gap = 3;
-  const columns = data.columns;
+  // Guard clause for empty data
+  if (!csvData) {
+    console.error('No CSV data provided');
+    return;
+  }
 
-  const container = d3.select('#fullGridButton').node().parentNode;
-  d3.select(container).selectAll('svg').remove();
+  try {
+    const data = d3.csvParse(csvData);
+    const rectSize = 8;
+    const gap = 3;
+    
+    // Only use columns that are currently selected
+    const columns = data.columns.filter(col => selectedColumns.has(col));
 
-  const svg = d3.select(container).append('svg')
-    .attr('width', '100%')
-    .attr('height', '100%')
-    .style('overflow', 'auto');
+    // Guard clause for empty parsed data
+    if (!data.length || !columns.length) {
+      console.error('No data or columns to visualize');
+      return;
+    }
 
-  let yPos = 20;
-  let maxXPos = 0;
+    const container = d3.select('#fullGridButton').node().parentNode;
+    d3.select(container).selectAll('svg').remove();
 
-  data.forEach((row, rowIndex) => {
-    let xPos = 10;
+    const svg = d3.select(container).append('svg')
+      .attr('width', '100%')
+      .attr('height', '100%')
+      .style('overflow', 'auto');
 
-    columns.forEach((col, colIndex) => {
-      const value = row[col];
-      const colorScale = globalColorScales[col];
-      let color;
+    let yPos = 20;
+    let maxXPos = 0;
 
-      if (colorScale.type === 'numerical') {
-        color = colorScale.scale(+value);
-      } else {
-        color = colorScale.scale(value);
-      }
+    // Ensure globalColorScales exists
+    if (!globalColorScales) {
+      console.warn('Color scales not initialized, generating new scales');
+      globalColorScales = generateColorScales(data);
+    }
 
-      svg.append('rect')
-        .attr('x', xPos)
-        .attr('y', yPos)
-        .attr('width', rectSize)
-        .attr('height', rectSize)
-        .attr('fill', color);
+    data.forEach((row, rowIndex) => {
+      let xPos = 10;
 
-      xPos += rectSize + gap;
-      if (xPos > maxXPos) {
-        maxXPos = xPos;
-      }
+      // Only process selected columns
+      columns.forEach((col, colIndex) => {
+        const value = row[col];
+        const colorScale = globalColorScales[col];
+
+        if (!colorScale || !colorScale.type) {
+          console.warn(`Skipping column ${col} - no valid color scale`);
+          return; // Skip this column
+        }
+
+        let color;
+        try {
+          if (colorScale.type === 'numerical') {
+            // Handle numerical values
+            const numValue = +value;
+            if (!isNaN(numValue)) {
+              color = colorScale.scale(numValue);
+            } else {
+              color = '#cccccc'; // Default for invalid numerical values
+            }
+          } else if (colorScale.type === 'categorical') {
+            // Handle categorical values
+            color = colorScale.scale(value);
+          }
+        } catch (err) {
+          console.warn(`Error applying color scale for column ${col}:`, err);
+          color = '#cccccc'; // Default color for errors
+        }
+
+        svg.append('rect')
+          .attr('x', xPos)
+          .attr('y', yPos)
+          .attr('width', rectSize)
+          .attr('height', rectSize)
+          .attr('fill', color)
+          .append('title')
+          .text(`${col}: ${value}`);
+
+        xPos += rectSize + gap;
+        if (xPos > maxXPos) {
+          maxXPos = xPos;
+        }
+      });
+
+      yPos += rectSize + gap;
     });
 
-    yPos += rectSize + gap;
-  });
+    // Only adjust final SVG size if we actually rendered something
+    if (maxXPos > 0) {
+      svg.attr('width', maxXPos + 10)
+         .attr('height', yPos);
+    }
 
-  svg.attr('width', maxXPos + 10)
-    .attr('height', yPos);
+  } catch (error) {
+    console.error('Error visualizing CSV data:', error);
+  }
 }
 
 function visualizeGridSummary(data) {
@@ -1285,16 +1358,28 @@ function createColumnSelector(columns) {
   controlPanel.insertBefore(selectorContainer, legendContainer);
 }
 
-// Add this function to filter CSV data based on selected columns
 function filterCSVByColumns(csvData) {
   const data = d3.csvParse(csvData);
+  
+  // Ensure we only work with columns that actually exist in the data
+  const validSelectedColumns = Array.from(selectedColumns)
+    .filter(col => data.columns.includes(col));
+
+  if (validSelectedColumns.length === 0) {
+    console.warn('No valid columns selected for filtering');
+    return csvData; // Return original data if no valid columns selected
+  }
+
   const filteredData = data.map(row => {
     const filteredRow = {};
-    selectedColumns.forEach(column => {
-      filteredRow[column] = row[column];
+    validSelectedColumns.forEach(column => {
+      if (row.hasOwnProperty(column)) {
+        filteredRow[column] = row[column];
+      }
     });
     return filteredRow;
   });
+
   return d3.csvFormat(filteredData);
 }
 
