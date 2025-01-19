@@ -140,11 +140,51 @@ document.getElementById('colClusters').addEventListener('input', function() {
   document.getElementById('colClustersValue').textContent = this.value;
 });
 
-// Grid Summary button handler
+// Update the Grid Summary button handler to use filtered data
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
-  if (file) {
+  if (csvFileData) {
+    // Get the currently filtered data
+    const data = d3.csvParse(csvFileData);
+    
+    // Apply both categorical and numerical filters
+    const filteredData = data.filter(row => {
+      // Check categorical filters
+      const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
+        const rowValue = row[column];
+        return values.has(rowValue) || 
+               (values.has('OTHER') && !globalColorScales[column].scale.domain().includes(rowValue));
+      });
+      
+      // Check numerical filter if active
+      let numericalMatch = true;
+      if (activeNumericalFilters.column && activeNumericalFilters.range) {
+        const value = +row[activeNumericalFilters.column];
+        numericalMatch = value >= activeNumericalFilters.range[0] && 
+                        value <= activeNumericalFilters.range[1];
+      }
+      
+      return categoricalMatch && numericalMatch;
+    });
+
+    // Filter columns
+    const filteredColumns = Array.from(selectedColumns);
+    const finalFilteredData = filteredData.map(row => {
+      const newRow = {};
+      filteredColumns.forEach(col => {
+        if (row.hasOwnProperty(col)) {
+          newRow[col] = row[col];
+        }
+      });
+      return newRow;
+    });
+
+    // Convert to CSV
+    const filteredCSV = d3.csvFormat(finalFilteredData);
+
+    // Create form data with the filtered CSV
     const formData = new FormData();
-    formData.append('file', file);
+    const filteredBlob = new Blob([filteredCSV], { type: 'text/csv' });
+    formData.append('file', new File([filteredBlob], 'filtered.csv', { type: 'text/csv' }));
     formData.append('rowClusters', document.getElementById('rowClusters').value);
     formData.append('colClusters', document.getElementById('colClusters').value);
 
