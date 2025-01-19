@@ -724,80 +724,6 @@ function createLegends(colorScales) {
   }
 }
 
-// function createNumericalLegend(container) {
-//   const gradientHeight = 15;
-//   const labelSpacing = 15;
-
-//   const gradientSvg = container.append('svg')
-//     .attr('id', 'numericalGradient')
-//     .attr('width', '100%')
-//     .attr('height', gradientHeight + labelSpacing * 2)
-//     .style('display', 'block');
-
-//   // Create initial gradient
-//   const gradient = gradientSvg.append('defs')
-//     .append('linearGradient')
-//     .attr('id', 'numerical-gradient')
-//     .attr('x1', '0%')
-//     .attr('x2', '100%');
-
-//   gradient.append('stop')
-//     .attr('offset', '0%')
-//     .attr('stop-color', '#fdd49e');
-
-//   gradient.append('stop')
-//     .attr('offset', '100%')
-//     .attr('stop-color', '#7f0000');
-
-//   // Create interactive gradient rect
-//   gradientSvg.append('rect')
-//     .attr('x', 0)
-//     .attr('y', labelSpacing)
-//     .attr('width', '100%')
-//     .attr('height', gradientHeight)
-//     .style('fill', 'url(#numerical-gradient)')
-//     .style('cursor', 'pointer')
-//     .on('click', function(event) {
-//       if (!activeNumericalFilters.column) return;
-      
-//       const bbox = this.getBoundingClientRect();
-//       const x = event.clientX - bbox.left;
-//       const percentage = x / bbox.width;
-      
-//       const scale = globalColorScales[activeNumericalFilters.column].scale;
-//       const domain = scale.domain();
-//       const selectedValue = domain[0] + (domain[1] - domain[0]) * percentage;
-      
-//       // Define range around clicked value
-//       const rangeSize = (domain[1] - domain[0]) * 0.1; // 10% of total range
-//       activeNumericalFilters.range = [
-//         selectedValue - rangeSize,
-//         selectedValue + rangeSize
-//       ];
-      
-//       console.log('Selected numerical range:', activeNumericalFilters.range);
-//       updateVisualizationsWithFilters();
-//       updateNumericalLegendStyles();
-//     });
-
-//   // Add labels
-//   gradientSvg.append('text')
-//     .attr('class', 'min-value')
-//     .attr('x', 0)
-//     .attr('y', labelSpacing - 3)
-//     .style('font-size', '0.8em')
-//     .style('fill', 'white')
-//     .text('Min');
-
-//   gradientSvg.append('text')
-//     .attr('class', 'max-value')
-//     .attr('x', '100%')
-//     .attr('y', labelSpacing - 3)
-//     .style('font-size', '0.8em')
-//     .style('text-anchor', 'end')
-//     .style('fill', 'white')
-//     .text('Max');
-// }
 
 function createNumericalLegend(container) {
   const gradientHeight = 15;
@@ -1156,29 +1082,6 @@ function updateNumericalLegendStyles() {
     d3.select('#numericalGradient').selectAll('.range-indicator').remove();
   }
 }
-
-// function updateNumericalLegend(colorScale) {
-//   const domain = colorScale.scale.domain();
-//   const gradientSvg = d3.select('#numericalGradient');
-  
-//   // Update labels
-//   gradientSvg.select('.min-value').text(domain[0].toFixed(1));
-//   gradientSvg.select('.max-value').text(domain[1].toFixed(1));
-  
-//   // Update gradient colors
-//   const gradient = d3.select('#numerical-gradient');
-//   gradient.selectAll('stop').remove();
-  
-//   gradient.append('stop')
-//     .attr('offset', '0%')
-//     .attr('stop-color', colorScale.scale(domain[0]));
-
-//   gradient.append('stop')
-//     .attr('offset', '100%')
-//     .attr('stop-color', colorScale.scale(domain[1]));
-// }
-
-
 
 function updateLegendStyles() {
   // Update swatch styles based on active filters
