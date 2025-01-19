@@ -724,9 +724,165 @@ function createLegends(colorScales) {
   }
 }
 
+// function createNumericalLegend(container) {
+//   const gradientHeight = 15;
+//   const labelSpacing = 15;
+
+//   const gradientSvg = container.append('svg')
+//     .attr('id', 'numericalGradient')
+//     .attr('width', '100%')
+//     .attr('height', gradientHeight + labelSpacing * 2)
+//     .style('display', 'block');
+
+//   // Create initial gradient
+//   const gradient = gradientSvg.append('defs')
+//     .append('linearGradient')
+//     .attr('id', 'numerical-gradient')
+//     .attr('x1', '0%')
+//     .attr('x2', '100%');
+
+//   gradient.append('stop')
+//     .attr('offset', '0%')
+//     .attr('stop-color', '#fdd49e');
+
+//   gradient.append('stop')
+//     .attr('offset', '100%')
+//     .attr('stop-color', '#7f0000');
+
+//   // Create interactive gradient rect
+//   gradientSvg.append('rect')
+//     .attr('x', 0)
+//     .attr('y', labelSpacing)
+//     .attr('width', '100%')
+//     .attr('height', gradientHeight)
+//     .style('fill', 'url(#numerical-gradient)')
+//     .style('cursor', 'pointer')
+//     .on('click', function(event) {
+//       if (!activeNumericalFilters.column) return;
+      
+//       const bbox = this.getBoundingClientRect();
+//       const x = event.clientX - bbox.left;
+//       const percentage = x / bbox.width;
+      
+//       const scale = globalColorScales[activeNumericalFilters.column].scale;
+//       const domain = scale.domain();
+//       const selectedValue = domain[0] + (domain[1] - domain[0]) * percentage;
+      
+//       // Define range around clicked value
+//       const rangeSize = (domain[1] - domain[0]) * 0.1; // 10% of total range
+//       activeNumericalFilters.range = [
+//         selectedValue - rangeSize,
+//         selectedValue + rangeSize
+//       ];
+      
+//       console.log('Selected numerical range:', activeNumericalFilters.range);
+//       updateVisualizationsWithFilters();
+//       updateNumericalLegendStyles();
+//     });
+
+//   // Add labels
+//   gradientSvg.append('text')
+//     .attr('class', 'min-value')
+//     .attr('x', 0)
+//     .attr('y', labelSpacing - 3)
+//     .style('font-size', '0.8em')
+//     .style('fill', 'white')
+//     .text('Min');
+
+//   gradientSvg.append('text')
+//     .attr('class', 'max-value')
+//     .attr('x', '100%')
+//     .attr('y', labelSpacing - 3)
+//     .style('font-size', '0.8em')
+//     .style('text-anchor', 'end')
+//     .style('fill', 'white')
+//     .text('Max');
+// }
+
 function createNumericalLegend(container) {
   const gradientHeight = 15;
   const labelSpacing = 15;
+  
+  // Add double range slider container
+  const sliderContainer = container.append('div')
+    .style('margin', '10px 0')
+    .style('display', 'none')
+    .attr('id', 'rangeSliderContainer');
+
+  // Add min and max input fields
+  const inputContainer = sliderContainer.append('div')
+    .style('display', 'flex')
+    .style('justify-content', 'space-between')
+    .style('margin-bottom', '10px');
+
+  const minInput = inputContainer.append('input')
+    .attr('type', 'number')
+    .attr('id', 'minRangeInput')
+    .style('width', '45%')
+    .style('background', '#2c3e50')
+    .style('color', 'white')
+    .style('border', '1px solid #34495e')
+    .style('padding', '3px');
+
+  const maxInput = inputContainer.append('input')
+    .attr('type', 'number')
+    .attr('id', 'maxRangeInput')
+    .style('width', '45%')
+    .style('background', '#2c3e50')
+    .style('color', 'white')
+    .style('border', '1px solid #34495e')
+    .style('padding', '3px');
+
+  // Add double range slider
+  const slider = sliderContainer.append('div')
+    .style('position', 'relative')
+    .style('height', '20px');
+
+  // Add track
+  slider.append('div')
+    .style('position', 'absolute')
+    .style('left', '0')
+    .style('right', '0')
+    .style('top', '50%')
+    .style('height', '4px')
+    .style('background', '#34495e')
+    .style('transform', 'translateY(-50%)');
+
+  // Add range highlight
+  slider.append('div')
+    .attr('id', 'rangeHighlight')
+    .style('position', 'absolute')
+    .style('left', '0%')
+    .style('right', '50%')
+    .style('top', '50%')
+    .style('height', '4px')
+    .style('background', '#3498db')
+    .style('transform', 'translateY(-50%)');
+
+  // Add handles
+  const minHandle = slider.append('div')
+    .attr('id', 'minHandle')
+    .style('position', 'absolute')
+    .style('left', '0%')
+    .style('top', '50%')
+    .style('width', '12px')
+    .style('height', '12px')
+    .style('background', 'white')
+    .style('border-radius', '50%')
+    .style('transform', 'translate(-50%, -50%)')
+    .style('cursor', 'pointer');
+
+  const maxHandle = slider.append('div')
+    .attr('id', 'maxHandle')
+    .style('position', 'absolute')
+    .style('left', '100%')
+    .style('top', '50%')
+    .style('width', '12px')
+    .style('height', '12px')
+    .style('background', 'white')
+    .style('border-radius', '50%')
+    .style('transform', 'translate(-50%, -50%)')
+    .style('cursor', 'pointer');
 
   const gradientSvg = container.append('svg')
     .attr('id', 'numericalGradient')
@@ -734,7 +890,7 @@ function createNumericalLegend(container) {
     .attr('height', gradientHeight + labelSpacing * 2)
     .style('display', 'block');
 
-  // Create initial gradient
+  // Create gradient
   const gradient = gradientSvg.append('defs')
     .append('linearGradient')
     .attr('id', 'numerical-gradient')
@@ -749,36 +905,12 @@ function createNumericalLegend(container) {
     .attr('offset', '100%')
     .attr('stop-color', '#7f0000');
 
-  // Create interactive gradient rect
   gradientSvg.append('rect')
     .attr('x', 0)
     .attr('y', labelSpacing)
     .attr('width', '100%')
     .attr('height', gradientHeight)
-    .style('fill', 'url(#numerical-gradient)')
-    .style('cursor', 'pointer')
-    .on('click', function(event) {
-      if (!activeNumericalFilters.column) return;
-      
-      const bbox = this.getBoundingClientRect();
-      const x = event.clientX - bbox.left;
-      const percentage = x / bbox.width;
-      
-      const scale = globalColorScales[activeNumericalFilters.column].scale;
-      const domain = scale.domain();
-      const selectedValue = domain[0] + (domain[1] - domain[0]) * percentage;
-      
-      // Define range around clicked value
-      const rangeSize = (domain[1] - domain[0]) * 0.1; // 10% of total range
-      activeNumericalFilters.range = [
-        selectedValue - rangeSize,
-        selectedValue + rangeSize
-      ];
-      
-      console.log('Selected numerical range:', activeNumericalFilters.range);
-      updateVisualizationsWithFilters();
-      updateNumericalLegendStyles();
-    });
+    .style('fill', 'url(#numerical-gradient)');
 
   // Add labels
   gradientSvg.append('text')
@@ -797,6 +929,130 @@ function createNumericalLegend(container) {
     .style('text-anchor', 'end')
     .style('fill', 'white')
     .text('Max');
+
+  // Add drag behavior
+  let isDragging = false;
+  let activeHandle = null;
+
+  function startDrag(handle) {
+    isDragging = true;
+    activeHandle = handle;
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', stopDrag);
+  }
+
+  function stopDrag() {
+    isDragging = false;
+    activeHandle = null;
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', stopDrag);
+  }
+
+  function onDrag(event) {
+    if (!isDragging || !activeHandle || !activeNumericalFilters.column) return;
+
+    const sliderRect = slider.node().getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(100,
+      ((event.clientX - sliderRect.left) / sliderRect.width) * 100
+    ));
+
+    const scale = globalColorScales[activeNumericalFilters.column].scale;
+    const domain = scale.domain();
+    const value = domain[0] + (domain[1] - domain[0]) * (percentage / 100);
+
+    if (activeHandle.id === 'minHandle') {
+      const maxValue = activeNumericalFilters.range ? activeNumericalFilters.range[1] : domain[1];
+      if (value < maxValue) {
+        activeHandle.style.left = `${percentage}%`;
+        document.getElementById('rangeHighlight').style.left = `${percentage}%`;
+        activeNumericalFilters.range = [value, maxValue];
+        minInput.property('value', value.toFixed(2));
+      }
+    } else {
+      const minValue = activeNumericalFilters.range ? activeNumericalFilters.range[0] : domain[0];
+      if (value > minValue) {
+        activeHandle.style.left = `${percentage}%`;
+        document.getElementById('rangeHighlight').style.right = `${100 - percentage}%`;
+        activeNumericalFilters.range = [minValue, value];
+        maxInput.property('value', value.toFixed(2));
+      }
+    }
+
+    updateVisualizationsWithFilters();
+  }
+
+  minHandle.on('mousedown', () => startDrag(minHandle.node()));
+  maxHandle.on('mousedown', () => startDrag(maxHandle.node()));
+
+  // Add input handlers
+  function updateFromInput() {
+    if (!activeNumericalFilters.column) return;
+
+    const scale = globalColorScales[activeNumericalFilters.column].scale;
+    const domain = scale.domain();
+    const minVal = Math.max(domain[0], Math.min(domain[1], +minInput.property('value')));
+    const maxVal = Math.max(domain[0], Math.min(domain[1], +maxInput.property('value')));
+
+    if (minVal < maxVal) {
+      const minPercentage = ((minVal - domain[0]) / (domain[1] - domain[0])) * 100;
+      const maxPercentage = ((maxVal - domain[0]) / (domain[1] - domain[0])) * 100;
+
+      minHandle.style('left', `${minPercentage}%`);
+      maxHandle.style('left', `${maxPercentage}%`);
+      document.getElementById('rangeHighlight').style.left = `${minPercentage}%`;
+      document.getElementById('rangeHighlight').style.right = `${100 - maxPercentage}%`;
+
+      activeNumericalFilters.range = [minVal, maxVal];
+      updateVisualizationsWithFilters();
+    }
+  }
+
+  minInput.on('change', updateFromInput);
+  maxInput.on('change', updateFromInput);
+}
+
+function updateNumericalLegend(colorScale) {
+  const domain = colorScale.scale.domain();
+  const gradientSvg = d3.select('#numericalGradient');
+  
+  // Update labels
+  gradientSvg.select('.min-value').text(domain[0].toFixed(1));
+  gradientSvg.select('.max-value').text(domain[1].toFixed(1));
+  
+  // Update gradient colors
+  const gradient = d3.select('#numerical-gradient');
+  gradient.selectAll('stop').remove();
+  
+  gradient.append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', colorScale.scale(domain[0]));
+
+  gradient.append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', colorScale.scale(domain[1]));
+
+  // Show range slider container and update input values
+  const sliderContainer = d3.select('#rangeSliderContainer')
+    .style('display', 'block');
+
+  const minInput = d3.select('#minRangeInput')
+    .attr('min', domain[0])
+    .attr('max', domain[1])
+    .attr('step', (domain[1] - domain[0]) / 100)
+    .property('value', domain[0]);
+
+  const maxInput = d3.select('#maxRangeInput')
+    .attr('min', domain[0])
+    .attr('max', domain[1])
+    .attr('step', (domain[1] - domain[0]) / 100)
+    .property('value', domain[1]);
+
+  // Reset handles and highlight
+  d3.select('#minHandle').style('left', '0%');
+  d3.select('#maxHandle').style('left', '100%');
+  d3.select('#rangeHighlight')
+    .style('left', '0%')
+    .style('right', '0%');
 }
 
 function updateVisualizationsWithFilters() {
@@ -901,26 +1157,28 @@ function updateNumericalLegendStyles() {
   }
 }
 
-function updateNumericalLegend(colorScale) {
-  const domain = colorScale.scale.domain();
-  const gradientSvg = d3.select('#numericalGradient');
+// function updateNumericalLegend(colorScale) {
+//   const domain = colorScale.scale.domain();
+//   const gradientSvg = d3.select('#numericalGradient');
   
-  // Update labels
-  gradientSvg.select('.min-value').text(domain[0].toFixed(1));
-  gradientSvg.select('.max-value').text(domain[1].toFixed(1));
+//   // Update labels
+//   gradientSvg.select('.min-value').text(domain[0].toFixed(1));
+//   gradientSvg.select('.max-value').text(domain[1].toFixed(1));
   
-  // Update gradient colors
-  const gradient = d3.select('#numerical-gradient');
-  gradient.selectAll('stop').remove();
+//   // Update gradient colors
+//   const gradient = d3.select('#numerical-gradient');
+//   gradient.selectAll('stop').remove();
   
-  gradient.append('stop')
-    .attr('offset', '0%')
-    .attr('stop-color', colorScale.scale(domain[0]));
+//   gradient.append('stop')
+//     .attr('offset', '0%')
+//     .attr('stop-color', colorScale.scale(domain[0]));
 
-  gradient.append('stop')
-    .attr('offset', '100%')
-    .attr('stop-color', colorScale.scale(domain[1]));
-}
+//   gradient.append('stop')
+//     .attr('offset', '100%')
+//     .attr('stop-color', colorScale.scale(domain[1]));
+// }
+
+
 
 function updateLegendStyles() {
   // Update swatch styles based on active filters
