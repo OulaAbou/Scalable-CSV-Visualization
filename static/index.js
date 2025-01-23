@@ -86,7 +86,13 @@ function generateColorScales(data) {
   return colorScales;
 }
 
+// Remove the full grid button
+const fullGridButton = document.getElementById('fullGridButton');
+if (fullGridButton) {
+  fullGridButton.parentNode.removeChild(fullGridButton);
+}
 
+// Modify file input handler to immediately visualize CSV
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
@@ -97,16 +103,33 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
         csvFileData = e.target.result;
         try {
           const data = d3.csvParse(csvFileData);
-          createColumnSelector(data.columns); // Add this line
+          createColumnSelector(data.columns);
           globalColorScales = generateColorScales(data);
           
           document.querySelector('.search-tab label').innerHTML = 
             '<span class="magnifier-icon">&#128269;</span>' + file.name;
           
+          // Update visualizations
           createLegends(globalColorScales);
           visualizeCSVData(csvFileData);
-          
           await fetchVSMData(csvFileData);
+          
+          // Update grid summary if it's active
+          if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('rowClusters', document.getElementById('rowClusters').value);
+            formData.append('colClusters', document.getElementById('colClusters').value);
+
+            const response = await fetch('/get_clusters', {
+              method: 'POST',
+              body: formData
+            });
+            const clusterData = await response.json();
+            if (!clusterData.error) {
+              visualizeGridSummary(clusterData);
+            }
+          }
         } catch (error) {
           console.error('Error processing CSV:', error);
           alert('Error processing CSV file. Please check the file format.');
@@ -121,16 +144,6 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
   }
 });
 
-
-// Modified Full Grid button handler
-document.getElementById('fullGridButton').addEventListener('click', function() {
-  if (csvFileData) {
-    visualizeCSVData(csvFileData);
-  } else {
-    alert('Please upload a CSV file first using the search tab.');
-  }
-});
-
 // Update slider values display
 document.getElementById('rowClusters').addEventListener('input', function() {
   document.getElementById('rowClustersValue').textContent = this.value;
@@ -139,6 +152,7 @@ document.getElementById('rowClusters').addEventListener('input', function() {
 document.getElementById('colClusters').addEventListener('input', function() {
   document.getElementById('colClustersValue').textContent = this.value;
 });
+
 
 // Update the Grid Summary button handler to use filtered data
 document.getElementById('gridSummaryButton').addEventListener('click', function() {
@@ -208,8 +222,106 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
+// function visualizeCSVData(csvData) {
+//   // Guard clause for empty data
+//   if (!csvData) {
+//     console.error('No CSV data provided');
+//     return;
+//   }
+
+//   try {
+//     const data = d3.csvParse(csvData);
+//     const rectSize = 8;
+//     const gap = 3;
+    
+//     // Only use columns that are currently selected
+//     const columns = data.columns.filter(col => selectedColumns.has(col));
+
+//     // Guard clause for empty parsed data
+//     if (!data.length || !columns.length) {
+//       console.error('No data or columns to visualize');
+//       return;
+//     }
+
+//     const container = d3.select('#fullGridButton').node().parentNode;
+//     d3.select(container).selectAll('svg').remove();
+
+//     const svg = d3.select(container).append('svg')
+//       .attr('width', '100%')
+//       .attr('height', '100%')
+//       .style('overflow', 'auto');
+
+//     let yPos = 20;
+//     let maxXPos = 0;
+
+//     // Ensure globalColorScales exists
+//     if (!globalColorScales) {
+//       console.warn('Color scales not initialized, generating new scales');
+//       globalColorScales = generateColorScales(data);
+//     }
+
+//     data.forEach((row, rowIndex) => {
+//       let xPos = 10;
+
+//       // Only process selected columns
+//       columns.forEach((col, colIndex) => {
+//         const value = row[col];
+//         const colorScale = globalColorScales[col];
+
+//         if (!colorScale || !colorScale.type) {
+//           console.warn(`Skipping column ${col} - no valid color scale`);
+//           return; // Skip this column
+//         }
+
+//         let color;
+//         try {
+//           if (colorScale.type === 'numerical') {
+//             // Handle numerical values
+//             const numValue = +value;
+//             if (!isNaN(numValue)) {
+//               color = colorScale.scale(numValue);
+//             } else {
+//               color = '#cccccc'; // Default for invalid numerical values
+//             }
+//           } else if (colorScale.type === 'categorical') {
+//             // Handle categorical values
+//             color = colorScale.scale(value);
+//           }
+//         } catch (err) {
+//           console.warn(`Error applying color scale for column ${col}:`, err);
+//           color = '#cccccc'; // Default color for errors
+//         }
+
+//         svg.append('rect')
+//           .attr('x', xPos)
+//           .attr('y', yPos)
+//           .attr('width', rectSize)
+//           .attr('height', rectSize)
+//           .attr('fill', color)
+//           .append('title')
+//           .text(`${col}: ${value}`);
+
+//         xPos += rectSize + gap;
+//         if (xPos > maxXPos) {
+//           maxXPos = xPos;
+//         }
+//       });
+
+//       yPos += rectSize + gap;
+//     });
+
+//     // Only adjust final SVG size if we actually rendered something
+//     if (maxXPos > 0) {
+//       svg.attr('width', maxXPos + 10)
+//          .attr('height', yPos);
+//     }
+
+//   } catch (error) {
+//     console.error('Error visualizing CSV data:', error);
+//   }
+// }
+
 function visualizeCSVData(csvData) {
-  // Guard clause for empty data
   if (!csvData) {
     console.error('No CSV data provided');
     return;
@@ -220,16 +332,15 @@ function visualizeCSVData(csvData) {
     const rectSize = 8;
     const gap = 3;
     
-    // Only use columns that are currently selected
     const columns = data.columns.filter(col => selectedColumns.has(col));
 
-    // Guard clause for empty parsed data
     if (!data.length || !columns.length) {
       console.error('No data or columns to visualize');
       return;
     }
 
-    const container = d3.select('#fullGridButton').node().parentNode;
+    // Use a fixed container
+    const container = document.querySelector('#visualizationContainer');
     d3.select(container).selectAll('svg').remove();
 
     const svg = d3.select(container).append('svg')
@@ -240,7 +351,6 @@ function visualizeCSVData(csvData) {
     let yPos = 20;
     let maxXPos = 0;
 
-    // Ensure globalColorScales exists
     if (!globalColorScales) {
       console.warn('Color scales not initialized, generating new scales');
       globalColorScales = generateColorScales(data);
@@ -248,34 +358,26 @@ function visualizeCSVData(csvData) {
 
     data.forEach((row, rowIndex) => {
       let xPos = 10;
-
-      // Only process selected columns
       columns.forEach((col, colIndex) => {
         const value = row[col];
         const colorScale = globalColorScales[col];
 
         if (!colorScale || !colorScale.type) {
           console.warn(`Skipping column ${col} - no valid color scale`);
-          return; // Skip this column
+          return;
         }
 
         let color;
         try {
           if (colorScale.type === 'numerical') {
-            // Handle numerical values
             const numValue = +value;
-            if (!isNaN(numValue)) {
-              color = colorScale.scale(numValue);
-            } else {
-              color = '#cccccc'; // Default for invalid numerical values
-            }
+            color = !isNaN(numValue) ? colorScale.scale(numValue) : '#cccccc';
           } else if (colorScale.type === 'categorical') {
-            // Handle categorical values
             color = colorScale.scale(value);
           }
         } catch (err) {
           console.warn(`Error applying color scale for column ${col}:`, err);
-          color = '#cccccc'; // Default color for errors
+          color = '#cccccc';
         }
 
         svg.append('rect')
@@ -288,15 +390,12 @@ function visualizeCSVData(csvData) {
           .text(`${col}: ${value}`);
 
         xPos += rectSize + gap;
-        if (xPos > maxXPos) {
-          maxXPos = xPos;
-        }
+        if (xPos > maxXPos) maxXPos = xPos;
       });
 
       yPos += rectSize + gap;
     });
 
-    // Only adjust final SVG size if we actually rendered something
     if (maxXPos > 0) {
       svg.attr('width', maxXPos + 10)
          .attr('height', yPos);
