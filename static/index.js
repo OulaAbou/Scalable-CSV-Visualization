@@ -708,7 +708,7 @@ function visualizeBlockDetails(blockData, blockType, columns) {
 }
 
 function createLegends(colorScales) {
-  console.log('Creating legends with scales:', colorScales);
+  // console.log('Creating legends with scales:', colorScales);
   
   // Remove any existing legends
   d3.select('.control-panel').selectAll('.legend-container').remove();
@@ -731,7 +731,7 @@ function createLegends(colorScales) {
     .filter(([_, scale]) => scale.type === 'numerical')
     .map(([column, _]) => column);
 
-  console.log('Numerical columns:', numericalColumns);
+  // console.log('Numerical columns:', numericalColumns);
 
   // Add column selector dropdown
   const dropdownContainer = numericalBox.append('div')
@@ -747,7 +747,7 @@ function createLegends(colorScales) {
     .style('margin-bottom', '5px')
     .on('change', function() {
       const selectedColumn = this.value;
-      console.log('Selected numerical column:', selectedColumn);
+      // console.log('Selected numerical column:', selectedColumn);
       activeNumericalFilters.column = selectedColumn === 'Select a column...' ? null : selectedColumn;
       activeNumericalFilters.range = null;
       if (selectedColumn !== 'Select a column...') {
@@ -774,7 +774,7 @@ function createLegends(colorScales) {
     .style('display', 'none')
     .text('Clear Numerical Filter')
     .on('click', () => {
-      console.log('Clearing numerical filter');
+      // console.log('Clearing numerical filter');
       activeNumericalFilters.column = null;
       activeNumericalFilters.range = null;
       d3.select('#numericalColumnSelect').property('value', 'Select a column...');
@@ -801,7 +801,7 @@ function createLegends(colorScales) {
     }
   });
 
-  console.log('Categorical scales:', categoricalScales);
+  // console.log('Categorical scales:', categoricalScales);
 
   // Add interactive categorical legends
   if (Object.keys(categoricalScales).length > 0) {
@@ -840,7 +840,7 @@ function createLegends(colorScales) {
         .style('display', 'none')
         .text('Clear Filters')
         .on('click', () => {
-          console.log('Clearing categorical filters for columns:', schemeInfo.columns);
+          // console.log('Clearing categorical filters for columns:', schemeInfo.columns);
           schemeInfo.columns.forEach(column => {
             activeFilters.delete(column);
           });
@@ -861,7 +861,7 @@ function createLegends(colorScales) {
           .style('gap', '5px')
           .style('cursor', 'pointer')
           .on('click', () => {
-            console.log('Clicked categorical value:', value);
+            // console.log('Clicked categorical value:', value);
             schemeInfo.columns.forEach(column => {
               if (!activeFilters.has(column)) {
                 activeFilters.set(column, new Set([value]));
@@ -877,7 +877,7 @@ function createLegends(colorScales) {
                 }
               }
             });
-            console.log('Active filters after click:', Array.from(activeFilters.entries()));
+            // console.log('Active filters after click:', Array.from(activeFilters.entries()));
             updateVisualizationsWithFilters();
             updateLegendStyles();
           });
