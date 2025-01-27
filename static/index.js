@@ -222,104 +222,6 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-// function visualizeCSVData(csvData) {
-//   // Guard clause for empty data
-//   if (!csvData) {
-//     console.error('No CSV data provided');
-//     return;
-//   }
-
-//   try {
-//     const data = d3.csvParse(csvData);
-//     const rectSize = 8;
-//     const gap = 3;
-    
-//     // Only use columns that are currently selected
-//     const columns = data.columns.filter(col => selectedColumns.has(col));
-
-//     // Guard clause for empty parsed data
-//     if (!data.length || !columns.length) {
-//       console.error('No data or columns to visualize');
-//       return;
-//     }
-
-//     const container = d3.select('#fullGridButton').node().parentNode;
-//     d3.select(container).selectAll('svg').remove();
-
-//     const svg = d3.select(container).append('svg')
-//       .attr('width', '100%')
-//       .attr('height', '100%')
-//       .style('overflow', 'auto');
-
-//     let yPos = 20;
-//     let maxXPos = 0;
-
-//     // Ensure globalColorScales exists
-//     if (!globalColorScales) {
-//       console.warn('Color scales not initialized, generating new scales');
-//       globalColorScales = generateColorScales(data);
-//     }
-
-//     data.forEach((row, rowIndex) => {
-//       let xPos = 10;
-
-//       // Only process selected columns
-//       columns.forEach((col, colIndex) => {
-//         const value = row[col];
-//         const colorScale = globalColorScales[col];
-
-//         if (!colorScale || !colorScale.type) {
-//           console.warn(`Skipping column ${col} - no valid color scale`);
-//           return; // Skip this column
-//         }
-
-//         let color;
-//         try {
-//           if (colorScale.type === 'numerical') {
-//             // Handle numerical values
-//             const numValue = +value;
-//             if (!isNaN(numValue)) {
-//               color = colorScale.scale(numValue);
-//             } else {
-//               color = '#cccccc'; // Default for invalid numerical values
-//             }
-//           } else if (colorScale.type === 'categorical') {
-//             // Handle categorical values
-//             color = colorScale.scale(value);
-//           }
-//         } catch (err) {
-//           console.warn(`Error applying color scale for column ${col}:`, err);
-//           color = '#cccccc'; // Default color for errors
-//         }
-
-//         svg.append('rect')
-//           .attr('x', xPos)
-//           .attr('y', yPos)
-//           .attr('width', rectSize)
-//           .attr('height', rectSize)
-//           .attr('fill', color)
-//           .append('title')
-//           .text(`${col}: ${value}`);
-
-//         xPos += rectSize + gap;
-//         if (xPos > maxXPos) {
-//           maxXPos = xPos;
-//         }
-//       });
-
-//       yPos += rectSize + gap;
-//     });
-
-//     // Only adjust final SVG size if we actually rendered something
-//     if (maxXPos > 0) {
-//       svg.attr('width', maxXPos + 10)
-//          .attr('height', yPos);
-//     }
-
-//   } catch (error) {
-//     console.error('Error visualizing CSV data:', error);
-//   }
-// }
 
 function visualizeCSVData(csvData) {
   if (!csvData) {
@@ -328,18 +230,41 @@ function visualizeCSVData(csvData) {
   }
 
   try {
-    const data = d3.csvParse(csvData);
+    // Parse CSV with special handling for malformed rows
+    const allRows = csvData.split('\n');
+    const headers = allRows[0].split(',').map(h => h.trim());
+    const expectedColumns = headers.length;
+    
+    // Process each row to find extra values
+    const processedData = allRows.slice(1).map(row => {
+      const values = row.split(',').map(v => v.trim());
+      const rowData = {};
+      
+      // Store regular values
+      headers.forEach((header, i) => {
+        rowData[header] = values[i] || '';
+      });
+      
+      // Store extra values if any exist
+      if (values.length > expectedColumns) {
+        rowData._extraValues = values.slice(expectedColumns);
+        rowData._extraValuesStartIndex = expectedColumns;
+      }
+      
+      return rowData;
+    });
+
     const rectSize = 8;
     const gap = 3;
     
-    const columns = data.columns.filter(col => selectedColumns.has(col));
+    // Only use columns that are currently selected
+    const columns = headers.filter(col => selectedColumns.has(col));
 
-    if (!data.length || !columns.length) {
+    if (!processedData.length || !columns.length) {
       console.error('No data or columns to visualize');
       return;
     }
 
-    // Use a fixed container
     const container = document.querySelector('#visualizationContainer');
     d3.select(container).selectAll('svg').remove();
 
@@ -353,12 +278,15 @@ function visualizeCSVData(csvData) {
 
     if (!globalColorScales) {
       console.warn('Color scales not initialized, generating new scales');
-      globalColorScales = generateColorScales(data);
+      globalColorScales = generateColorScales({ columns: headers, ...processedData });
     }
 
-    data.forEach((row, rowIndex) => {
+    // Draw regular cells
+    processedData.forEach((row, rowIndex) => {
       let xPos = 10;
-      columns.forEach((col, colIndex) => {
+      
+      // Draw regular columns
+      columns.forEach((col) => {
         const value = row[col];
         const colorScale = globalColorScales[col];
 
@@ -390,9 +318,29 @@ function visualizeCSVData(csvData) {
           .text(`${col}: ${value}`);
 
         xPos += rectSize + gap;
-        if (xPos > maxXPos) maxXPos = xPos;
       });
 
+      // Draw extra values if they exist
+      if (row._extraValues) {
+        // Calculate position for extra values (after all regular columns)
+        const extraXPos = 10 + (columns.length * (rectSize + gap));
+        
+        // Draw a single rectangle for extra values in red
+        svg.append('rect')
+          .attr('x', extraXPos)
+          .attr('y', yPos)
+          .attr('width', rectSize)
+          .attr('height', rectSize)
+          .attr('fill', '#ff0000')  // Red color to highlight error
+          .style('stroke', '#880000')
+          .style('stroke-width', '1px')
+          .append('title')
+          .text(`Extra values found: ${row._extraValues.join(', ')}`);
+
+        maxXPos = Math.max(maxXPos, extraXPos + rectSize);
+      }
+
+      maxXPos = Math.max(maxXPos, xPos);
       yPos += rectSize + gap;
     });
 
