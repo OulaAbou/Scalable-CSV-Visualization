@@ -222,7 +222,6 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-
 function visualizeCSVData(csvData) {
   if (!csvData) {
     console.error('No CSV data provided');
@@ -235,14 +234,18 @@ function visualizeCSVData(csvData) {
     const headers = allRows[0].split(',').map(h => h.trim());
     const expectedColumns = headers.length;
     
-    // Process each row to find extra values
+    // Process each row to find extra and missing values
     const processedData = allRows.slice(1).map(row => {
       const values = row.split(',').map(v => v.trim());
       const rowData = {};
       
-      // Store regular values
+      // Store regular values and track missing values
       headers.forEach((header, i) => {
         rowData[header] = values[i] || '';
+        if (!values[i] || values[i].trim() === '') {
+          if (!rowData._missingColumns) rowData._missingColumns = [];
+          rowData._missingColumns.push(header);
+        }
       });
       
       // Store extra values if any exist
@@ -281,13 +284,14 @@ function visualizeCSVData(csvData) {
       globalColorScales = generateColorScales({ columns: headers, ...processedData });
     }
 
-    // Draw regular cells
+    // Draw cells
     processedData.forEach((row, rowIndex) => {
       let xPos = 10;
       
       // Draw regular columns
       columns.forEach((col) => {
         const value = row[col];
+        const isMissing = !value || value.trim() === '';
         const colorScale = globalColorScales[col];
 
         if (!colorScale || !colorScale.type) {
@@ -296,26 +300,37 @@ function visualizeCSVData(csvData) {
         }
 
         let color;
-        try {
-          if (colorScale.type === 'numerical') {
-            const numValue = +value;
-            color = !isNaN(numValue) ? colorScale.scale(numValue) : '#cccccc';
-          } else if (colorScale.type === 'categorical') {
-            color = colorScale.scale(value);
+        if (isMissing) {
+          // Use red for missing values
+          color = '#ff0000';
+        } else {
+          try {
+            if (colorScale.type === 'numerical') {
+              const numValue = +value;
+              color = !isNaN(numValue) ? colorScale.scale(numValue) : '#ff0000';
+            } else if (colorScale.type === 'categorical') {
+              color = colorScale.scale(value);
+            }
+          } catch (err) {
+            console.warn(`Error applying color scale for column ${col}:`, err);
+            color = '#cccccc';
           }
-        } catch (err) {
-          console.warn(`Error applying color scale for column ${col}:`, err);
-          color = '#cccccc';
         }
 
-        svg.append('rect')
+        const rect = svg.append('rect')
           .attr('x', xPos)
           .attr('y', yPos)
           .attr('width', rectSize)
           .attr('height', rectSize)
-          .attr('fill', color)
-          .append('title')
-          .text(`${col}: ${value}`);
+          .attr('fill', color);
+
+        if (isMissing) {
+          rect.style('stroke', '#880000')
+              .style('stroke-width', '1px');
+        }
+
+        rect.append('title')
+           .text(`${col}: ${isMissing ? 'Missing value' : value}`);
 
         xPos += rectSize + gap;
       });
@@ -331,7 +346,7 @@ function visualizeCSVData(csvData) {
           .attr('y', yPos)
           .attr('width', rectSize)
           .attr('height', rectSize)
-          .attr('fill', '#ff0000')  // Red color to highlight error
+          .attr('fill', '#ff0000')
           .style('stroke', '#880000')
           .style('stroke-width', '1px')
           .append('title')
