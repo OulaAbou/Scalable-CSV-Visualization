@@ -235,9 +235,11 @@ function visualizeCSVData(csvData) {
     const expectedColumns = headers.length;
     
     // Process each row to find extra and missing values
-    const processedData = allRows.slice(1).map(row => {
+    const processedData = allRows.slice(1).map((row, rowIndex) => {
       const values = row.split(',').map(v => v.trim());
-      const rowData = {};
+      const rowData = {
+        _rowIndex: rowIndex, // Add row index for reference
+      };
       
       // Store regular values and track missing values
       headers.forEach((header, i) => {
@@ -276,16 +278,68 @@ function visualizeCSVData(csvData) {
       .attr('height', '100%')
       .style('overflow', 'auto');
 
+    // Add context menu for extra values
+    const contextMenu = d3.select('body')
+      .append('div')
+      .attr('class', 'extra-values-menu')
+      .style('position', 'absolute')
+      .style('display', 'none')
+      .style('background', '#2c3e50')
+      .style('border', '1px solid #34495e')
+      .style('padding', '5px')
+      .style('border-radius', '3px')
+      .style('z-index', '1000');
+
+    // Add menu items
+    contextMenu.append('div')
+      .attr('class', 'menu-item')
+      .text('Delete Selected')
+      .style('padding', '5px 10px')
+      .style('cursor', 'pointer')
+      .style('color', 'white')
+      .on('click', deleteSelectedExtraValues);
+
     let yPos = 20;
     let maxXPos = 0;
+    let selectedExtraValues = new Set();
 
-    if (!globalColorScales) {
-      console.warn('Color scales not initialized, generating new scales');
-      globalColorScales = generateColorScales({ columns: headers, ...processedData });
+    function deleteSelectedExtraValues() {
+      // Hide context menu
+      contextMenu.style('display', 'none');
+
+      // Remove selected extra values from the data
+      processedData.forEach(row => {
+        if (row._extraValues) {
+          row._extraValues = row._extraValues.filter((_, i) => !selectedExtraValues.has(`${row._rowIndex}-${i}`));
+          if (row._extraValues.length === 0) {
+            delete row._extraValues;
+            delete row._extraValuesStartIndex;
+          }
+        }
+      });
+
+      // Clear selection and redraw
+      selectedExtraValues.clear();
+      visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+    }
+
+    // Function to convert processed data back to CSV
+    function convertProcessedDataToCSV(data, headers) {
+      const csvRows = [headers.join(',')];
+      
+      data.forEach(row => {
+        const values = headers.map(header => row[header] || '');
+        if (row._extraValues) {
+          values.push(...row._extraValues);
+        }
+        csvRows.push(values.join(','));
+      });
+      
+      return csvRows.join('\n');
     }
 
     // Draw cells
-    processedData.forEach((row, rowIndex) => {
+    processedData.forEach((row) => {
       let xPos = 10;
       
       // Draw regular columns
@@ -294,14 +348,8 @@ function visualizeCSVData(csvData) {
         const isMissing = !value || value.trim() === '';
         const colorScale = globalColorScales[col];
 
-        if (!colorScale || !colorScale.type) {
-          console.warn(`Skipping column ${col} - no valid color scale`);
-          return;
-        }
-
         let color;
         if (isMissing) {
-          // Use red for missing values
           color = '#ff0000';
         } else {
           try {
@@ -322,7 +370,10 @@ function visualizeCSVData(csvData) {
           .attr('y', yPos)
           .attr('width', rectSize)
           .attr('height', rectSize)
-          .attr('fill', color);
+          .attr('fill', color)
+          .attr('class', 'grid-cell')
+          .attr('data-column', col)
+          .attr('data-row', row._rowIndex);
 
         if (isMissing) {
           rect.style('stroke', '#880000')
@@ -332,31 +383,113 @@ function visualizeCSVData(csvData) {
         rect.append('title')
            .text(`${col}: ${isMissing ? 'Missing value' : value}`);
 
+        // Make empty cells droppable
+        if (isMissing) {
+          rect.attr('class', 'grid-cell droppable')
+              .on('dragover', function(event) {
+                event.preventDefault();
+                d3.select(this).style('stroke', '#00ff00');
+              })
+              .on('dragleave', function() {
+                d3.select(this).style('stroke', '#880000');
+              })
+              .on('drop', function(event) {
+                event.preventDefault();
+                const sourceId = event.dataTransfer.getData('text/plain');
+                const [sourceRow, sourceIndex] = sourceId.split('-');
+                
+                // Update data
+                const sourceRowData = processedData[sourceRow];
+                const droppedValue = sourceRowData._extraValues[sourceIndex];
+                
+                // Update the target cell
+                row[col] = droppedValue;
+                
+                // Remove the value from extra values
+                sourceRowData._extraValues.splice(sourceIndex, 1);
+                if (sourceRowData._extraValues.length === 0) {
+                  delete sourceRowData._extraValues;
+                  delete sourceRowData._extraValuesStartIndex;
+                }
+                
+                // Redraw the visualization
+                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+              });
+        }
+
         xPos += rectSize + gap;
       });
 
       // Draw extra values if they exist
       if (row._extraValues) {
-        // Calculate position for extra values (after all regular columns)
+        // Calculate position for extra values
         const extraXPos = 10 + (columns.length * (rectSize + gap));
         
-        // Draw a single rectangle for extra values in red
-        svg.append('rect')
-          .attr('x', extraXPos)
-          .attr('y', yPos)
-          .attr('width', rectSize)
-          .attr('height', rectSize)
-          .attr('fill', '#ff0000')
-          .style('stroke', '#880000')
-          .style('stroke-width', '1px')
-          .append('title')
-          .text(`Extra values found: ${row._extraValues.join(', ')}`);
+        row._extraValues.forEach((value, i) => {
+          const extraId = `${row._rowIndex}-${i}`;
+          
+          const extraRect = svg.append('rect')
+            .attr('x', extraXPos + (i * (rectSize + gap)))
+            .attr('y', yPos)
+            .attr('width', rectSize)
+            .attr('height', rectSize)
+            .attr('fill', '#ff0000')
+            .attr('class', 'extra-value')
+            .attr('data-id', extraId)
+            .style('cursor', 'pointer')
+            .style('stroke', selectedExtraValues.has(extraId) ? '#00ff00' : '#880000')
+            .style('stroke-width', '1px')
+            .attr('draggable', true)
+            .on('dragstart', function(event) {
+              event.dataTransfer.setData('text/plain', extraId);
+              event.dataTransfer.effectAllowed = 'move';
+            })
+            .on('click', function(event) {
+              const id = d3.select(this).attr('data-id');
+              if (event.ctrlKey || event.metaKey) {
+                // Toggle selection
+                if (selectedExtraValues.has(id)) {
+                  selectedExtraValues.delete(id);
+                  d3.select(this).style('stroke', '#880000');
+                } else {
+                  selectedExtraValues.add(id);
+                  d3.select(this).style('stroke', '#00ff00');
+                }
+              } else {
+                // Clear previous selection
+                selectedExtraValues.clear();
+                svg.selectAll('.extra-value').style('stroke', '#880000');
+                // Select this item
+                selectedExtraValues.add(id);
+                d3.select(this).style('stroke', '#00ff00');
+              }
+            })
+            .on('contextmenu', function(event) {
+              event.preventDefault();
+              if (selectedExtraValues.size > 0) {
+                contextMenu
+                  .style('display', 'block')
+                  .style('left', (event.pageX + 5) + 'px')
+                  .style('top', (event.pageY + 5) + 'px');
+              }
+            });
 
-        maxXPos = Math.max(maxXPos, extraXPos + rectSize);
+          extraRect.append('title')
+            .text(`Extra value: ${value}`);
+
+          maxXPos = Math.max(maxXPos, extraXPos + (i * (rectSize + gap)) + rectSize);
+        });
       }
 
       maxXPos = Math.max(maxXPos, xPos);
       yPos += rectSize + gap;
+    });
+
+    // Hide context menu when clicking outside
+    d3.select('body').on('click', function(event) {
+      if (!event.target.closest('.extra-values-menu')) {
+        contextMenu.style('display', 'none');
+      }
     });
 
     if (maxXPos > 0) {
