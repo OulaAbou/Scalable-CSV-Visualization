@@ -86,12 +86,6 @@ function generateColorScales(data) {
   return colorScales;
 }
 
-// // Remove the full grid button
-// const fullGridButton = document.getElementById('fullGridButton');
-// if (fullGridButton) {
-//   fullGridButton.parentNode.removeChild(fullGridButton);
-// }
-
 // Modify file input handler to immediately visualize CSV
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
