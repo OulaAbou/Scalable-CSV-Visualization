@@ -86,11 +86,11 @@ function generateColorScales(data) {
   return colorScales;
 }
 
-// Remove the full grid button
-const fullGridButton = document.getElementById('fullGridButton');
-if (fullGridButton) {
-  fullGridButton.parentNode.removeChild(fullGridButton);
-}
+// // Remove the full grid button
+// const fullGridButton = document.getElementById('fullGridButton');
+// if (fullGridButton) {
+//   fullGridButton.parentNode.removeChild(fullGridButton);
+// }
 
 // Modify file input handler to immediately visualize CSV
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
@@ -502,8 +502,167 @@ function visualizeCSVData(csvData) {
   }
 }
 
+// Store the original data order for reference
+let originalDataOrder = null;
+let currentClusteredData = null;
+
+function synchronizeGridViews(clusterData) {
+  if (!csvFileData || !clusterData || !clusterData.blocks) return;
+  
+  const data = d3.csvParse(csvFileData);
+  currentClusteredData = clusterData;
+  
+  // Store original order if not already stored
+  if (!originalDataOrder) {
+    originalDataOrder = {
+      rows: data.map((_, i) => i),
+      columns: data.columns.slice()
+    };
+  }
+
+  // Get unique row clusters in order
+  const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
+  
+  // Create ordered arrays for rows and columns
+  let rowOrder = [];
+  let columnOrder = new Set();
+  
+  // Process blocks by row cluster order
+  rowClusters.forEach(rowCluster => {
+    // Get all blocks for this row cluster
+    const clusterBlocks = Object.entries(clusterData.blocks)
+      .filter(([key]) => key.split(',')[0] === rowCluster);
+    
+    // Calculate number of rows in this cluster from first block
+    if (clusterBlocks.length > 0) {
+      const rowCount = clusterBlocks[0][1].data.length;
+      const startIdx = rowOrder.length;
+      
+      // Add indices for all rows in this cluster
+      for (let i = 0; i < rowCount; i++) {
+        rowOrder.push(startIdx + i);
+      }
+      
+      // Add columns from all blocks in this cluster
+      clusterBlocks.forEach(([_, block]) => {
+        if (block.columns) {
+          block.columns.forEach(col => columnOrder.add(col));
+        }
+      });
+    }
+  });
+
+  // Reorder the data based on clustering
+  const reorderedData = rowOrder.map(i => {
+    if (i < data.length) {
+      return data[i];
+    }
+    // Handle case where index is out of bounds
+    console.warn(`Row index ${i} is out of bounds`);
+    return data[data.length - 1]; // Use last row as fallback
+  });
+  
+  const reorderedColumns = Array.from(columnOrder);
+  
+  // Create new CSV string with reordered data
+  const reorderedCsv = d3.csvFormat(reorderedData.map(row => {
+    const newRow = {};
+    reorderedColumns.forEach(col => {
+      if (row.hasOwnProperty(col)) {
+        newRow[col] = row[col];
+      }
+    });
+    return newRow;
+  }));
+
+  // Update visualizations with reordered data
+  visualizeCSVData(reorderedCsv);
+  
+  // Add visual cluster boundaries
+  addClusterBoundaries(rowClusters, reorderedData.length);
+}
+
+function addClusterBoundaries(rowClusters, totalRows) {
+  const container = document.querySelector('#visualizationContainer');
+  const svg = d3.select(container).select('svg');
+  if (!svg.empty()) {
+    // Remove any existing boundaries
+    svg.selectAll('.cluster-boundary').remove();
+    
+    // Get the dimensions of the visualization
+    const rectSize = 8;
+    const gap = 3;
+    
+    // Add horizontal lines between row clusters
+    let currentRowCount = 0;
+    rowClusters.forEach((_, index) => {
+      if (index < rowClusters.length - 1) {
+        const rowsInCluster = Math.floor(totalRows / rowClusters.length);
+        currentRowCount += rowsInCluster;
+        
+        svg.append('line')
+          .attr('class', 'cluster-boundary')
+          .attr('x1', 0)
+          .attr('y1', currentRowCount * (rectSize + gap))
+          .attr('x2', svg.attr('width'))
+          .attr('y2', currentRowCount * (rectSize + gap))
+          .style('stroke', '#ffffff')
+          .style('stroke-width', 1)
+          .style('stroke-dasharray', '5,5');
+      }
+    });
+  }
+}
+
+function resetToOriginalOrder() {
+  if (!csvFileData || !originalDataOrder) return;
+  
+  const data = d3.csvParse(csvFileData);
+  
+  // Reorder back to original
+  const reorderedData = originalDataOrder.rows.map(i => data[i]);
+  
+  // Create CSV string with original order
+  const originalOrderCsv = d3.csvFormat(reorderedData.map(row => {
+    const newRow = {};
+    originalDataOrder.columns.forEach(col => {
+      if (row.hasOwnProperty(col)) {
+        newRow[col] = row[col];
+      }
+    });
+    return newRow;
+  }));
+
+  // Update visualization with original order
+  visualizeCSVData(originalOrderCsv);
+  
+  // Remove cluster boundaries
+  const container = document.querySelector('#visualizationContainer');
+  const svg = d3.select(container).select('svg');
+  if (!svg.empty()) {
+    svg.selectAll('.cluster-boundary').remove();
+  }
+  
+  currentClusteredData = null;
+}
+
+// Add event listener to Grid Summary button to handle toggling
+document.getElementById('gridSummaryButton').addEventListener('click', function() {
+  const isActive = this.classList.toggle('active');
+  
+  if (!isActive && currentClusteredData) {
+    // Reset to original order when deactivating grid summary
+    resetToOriginalOrder();
+  } else if (isActive && currentClusteredData) {
+    // Reapply clustering when reactivating
+    synchronizeGridViews(currentClusteredData);
+  }
+});
+
 function visualizeGridSummary(data) {
   gridSummaryData = data;
+  synchronizeGridViews(data);
+  
   const container = d3.select('#gridSummaryButton').node().parentNode;
   d3.select(container).selectAll('svg').remove();
 
