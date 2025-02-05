@@ -500,71 +500,152 @@ function visualizeCSVData(csvData) {
 let originalDataOrder = null;
 let currentClusteredData = null;
 
+// function synchronizeGridViews(clusterData) {
+//   if (!csvFileData || !clusterData || !clusterData.blocks) return;
+  
+//   const data = d3.csvParse(csvFileData);
+//   currentClusteredData = clusterData;
+  
+//   // Store original order if not already stored
+//   if (!originalDataOrder) {
+//     originalDataOrder = {
+//       rows: data.map((_, i) => i),
+//       columns: data.columns.slice()
+//     };
+//   }
+
+//   // Get unique row clusters in order
+//   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
+  
+//   // Create ordered arrays for rows and columns
+//   let rowOrder = [];
+//   let columnOrder = new Set();
+  
+//   // Process blocks by row cluster order
+//   rowClusters.forEach(rowCluster => {
+//     // Get all blocks for this row cluster
+//     const clusterBlocks = Object.entries(clusterData.blocks)
+//       .filter(([key]) => key.split(',')[0] === rowCluster);
+    
+//     // Calculate number of rows in this cluster from first block
+//     if (clusterBlocks.length > 0) {
+//       const rowCount = clusterBlocks[0][1].data.length;
+//       const startIdx = rowOrder.length;
+      
+//       // Add indices for all rows in this cluster
+//       for (let i = 0; i < rowCount; i++) {
+//         rowOrder.push(startIdx + i);
+//       }
+      
+//       // Add columns from all blocks in this cluster
+//       clusterBlocks.forEach(([_, block]) => {
+//         if (block.columns) {
+//           block.columns.forEach(col => columnOrder.add(col));
+//         }
+//       });
+//     }
+//   });
+
+//   // Reorder the data based on clustering
+//   const reorderedData = rowOrder.map(i => {
+//     if (i < data.length) {
+//       return data[i];
+//     }
+//     // Handle case where index is out of bounds
+//     console.warn(`Row index ${i} is out of bounds`);
+//     return data[data.length - 1]; // Use last row as fallback
+//   });
+  
+//   const reorderedColumns = Array.from(columnOrder);
+  
+//   // Create new CSV string with reordered data
+//   const reorderedCsv = d3.csvFormat(reorderedData.map(row => {
+//     const newRow = {};
+//     reorderedColumns.forEach(col => {
+//       if (row.hasOwnProperty(col)) {
+//         newRow[col] = row[col];
+//       }
+//     });
+//     return newRow;
+//   }));
+
+//   // Update visualizations with reordered data
+//   visualizeCSVData(reorderedCsv);
+  
+//   // Add visual cluster boundaries
+//   addClusterBoundaries(rowClusters, reorderedData.length);
+// }
+
 function synchronizeGridViews(clusterData) {
   if (!csvFileData || !clusterData || !clusterData.blocks) return;
   
-  const data = d3.csvParse(csvFileData);
+  const originalData = d3.csvParse(csvFileData);
   currentClusteredData = clusterData;
   
   // Store original order if not already stored
   if (!originalDataOrder) {
     originalDataOrder = {
-      rows: data.map((_, i) => i),
-      columns: data.columns.slice()
+      rows: originalData.map((_, i) => i),
+      columns: originalData.columns.slice()
     };
   }
 
-  // Get unique row clusters in order
+  // Get unique row clusters
   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
   
-  // Create ordered arrays for rows and columns
-  let rowOrder = [];
-  let columnOrder = new Set();
+  // Create a map of ID to row data
+  const idToRow = new Map();
+  originalData.forEach(row => {
+    idToRow.set(row.ID.toString(), row);
+  });
+
+  // Build ordered rows based on block data
+  let orderedRows = [];
+  let processedIds = new Set();
   
-  // Process blocks by row cluster order
+  // Process each row cluster in order
   rowClusters.forEach(rowCluster => {
     // Get all blocks for this row cluster
     const clusterBlocks = Object.entries(clusterData.blocks)
-      .filter(([key]) => key.split(',')[0] === rowCluster);
-    
-    // Calculate number of rows in this cluster from first block
-    if (clusterBlocks.length > 0) {
-      const rowCount = clusterBlocks[0][1].data.length;
-      const startIdx = rowOrder.length;
-      
-      // Add indices for all rows in this cluster
-      for (let i = 0; i < rowCount; i++) {
-        rowOrder.push(startIdx + i);
-      }
-      
-      // Add columns from all blocks in this cluster
-      clusterBlocks.forEach(([_, block]) => {
-        if (block.columns) {
-          block.columns.forEach(col => columnOrder.add(col));
+      .filter(([key]) => key.split(',')[0] === rowCluster)
+      .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+
+    // Process each block
+    clusterBlocks.forEach(([_, block]) => {
+      // Get IDs from this block's data
+      block.data.forEach(rowData => {
+        const id = rowData[0].toString(); // First column is ID
+        if (!processedIds.has(id)) {
+          const originalRow = idToRow.get(id);
+          if (originalRow) {
+            orderedRows.push(originalRow);
+            processedIds.add(id);
+          }
         }
       });
+    });
+  });
+
+  // Add any remaining unprocessed rows
+  originalData.forEach(row => {
+    if (!processedIds.has(row.ID.toString())) {
+      orderedRows.push(row);
     }
   });
 
-  // Reorder the data based on clustering
-  const reorderedData = rowOrder.map(i => {
-    if (i < data.length) {
-      return data[i];
+  // Get ordered columns
+  const columnOrder = new Set();
+  Object.values(clusterData.blocks).forEach(block => {
+    if (block.columns) {
+      block.columns.forEach(col => columnOrder.add(col));
     }
-    // Handle case where index is out of bounds
-    console.warn(`Row index ${i} is out of bounds`);
-    return data[data.length - 1]; // Use last row as fallback
   });
-  
-  const reorderedColumns = Array.from(columnOrder);
-  
-  // Create new CSV string with reordered data
-  const reorderedCsv = d3.csvFormat(reorderedData.map(row => {
+
+  // Create reordered CSV
+  const reorderedCsv = d3.csvFormat(orderedRows.map(row => {
     const newRow = {};
-    reorderedColumns.forEach(col => {
-      if (row.hasOwnProperty(col)) {
-        newRow[col] = row[col];
-      }
+    Array.from(columnOrder).forEach(col => {
+      newRow[col] = row.hasOwnProperty(col) ? row[col] : '';
     });
     return newRow;
   }));
@@ -573,7 +654,7 @@ function synchronizeGridViews(clusterData) {
   visualizeCSVData(reorderedCsv);
   
   // Add visual cluster boundaries
-  addClusterBoundaries(rowClusters, reorderedData.length);
+  addClusterBoundaries(rowClusters, orderedRows.length);
 }
 
 function addClusterBoundaries(rowClusters, totalRows) {
