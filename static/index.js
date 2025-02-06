@@ -216,26 +216,25 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
+
 function visualizeCSVData(csvData) {
+
   if (!csvData) {
     console.error('No CSV data provided');
     return;
   }
 
   try {
-    // Parse CSV with special handling for malformed rows
     const allRows = csvData.split('\n');
-    const headers = allRows[0].split(',').map(h => h.trim());
+    let headers = allRows[0].split(',').map(h => h.trim());
     const expectedColumns = headers.length;
     
-    // Process each row to find extra and missing values
-    const processedData = allRows.slice(1).map((row, rowIndex) => {
+    let processedData = allRows.slice(1).map((row, rowIndex) => {
       const values = row.split(',').map(v => v.trim());
       const rowData = {
-        _rowIndex: rowIndex, // Add row index for reference
+        _rowIndex: rowIndex,
       };
       
-      // Store regular values and track missing values
       headers.forEach((header, i) => {
         rowData[header] = values[i] || '';
         if (!values[i] || values[i].trim() === '') {
@@ -244,7 +243,6 @@ function visualizeCSVData(csvData) {
         }
       });
       
-      // Store extra values if any exist
       if (values.length > expectedColumns) {
         rowData._extraValues = values.slice(expectedColumns);
         rowData._extraValuesStartIndex = expectedColumns;
@@ -255,8 +253,6 @@ function visualizeCSVData(csvData) {
 
     const rectSize = 8;
     const gap = 3;
-    
-    // Only use columns that are currently selected
     const columns = headers.filter(col => selectedColumns.has(col));
 
     if (!processedData.length || !columns.length) {
@@ -272,10 +268,10 @@ function visualizeCSVData(csvData) {
       .attr('height', '100%')
       .style('overflow', 'auto');
 
-    // Add context menu for extra values
-    const contextMenu = d3.select('body')
+    // Context menu for empty cells
+    const emptyContextMenu = d3.select('body')
       .append('div')
-      .attr('class', 'extra-values-menu')
+      .attr('class', 'empty-cell-menu')
       .style('position', 'absolute')
       .style('display', 'none')
       .style('background', '#2c3e50')
@@ -285,79 +281,163 @@ function visualizeCSVData(csvData) {
       .style('z-index', '1000');
 
     // Add menu items
-    contextMenu.append('div')
+    emptyContextMenu.selectAll('.menu-item')
+      .data(['Delete Column', 'Delete Row', 'Impute Value'])
+      .enter()
+      .append('div')
       .attr('class', 'menu-item')
-      .text('Delete Selected')
+      .text(d => d)
       .style('padding', '5px 10px')
       .style('cursor', 'pointer')
       .style('color', 'white')
-      .on('click', deleteSelectedExtraValues);
+      .on('click', handleEmptyContextMenuClick);
 
+    let selectedEmptyCells = new Set();
     let yPos = 20;
     let maxXPos = 0;
-    let selectedExtraValues = new Set();
 
-    function deleteSelectedExtraValues() {
-      // Hide context menu
-      contextMenu.style('display', 'none');
+    function handleEmptyContextMenuClick(event, action) {
+      emptyContextMenu.style('display', 'none');
+      
+      if (selectedEmptyCells.size === 0) return;
 
-      // Remove selected extra values from the data
-      processedData.forEach(row => {
-        if (row._extraValues) {
-          row._extraValues = row._extraValues.filter((_, i) => !selectedExtraValues.has(`${row._rowIndex}-${i}`));
-          if (row._extraValues.length === 0) {
-            delete row._extraValues;
-            delete row._extraValuesStartIndex;
+      const selectedCells = Array.from(selectedEmptyCells).map(id => {
+        const [row, col] = id.split('-');
+        return { row: parseInt(row), col };
+      });
+
+      switch(action) {
+        case 'Delete Column':
+          const columnsToDelete = new Set(selectedCells.map(cell => cell.col));
+          headers = headers.filter(h => !columnsToDelete.has(h));
+          processedData.forEach(row => {
+            columnsToDelete.forEach(col => delete row[col]);
+          });
+          break;
+
+        case 'Delete Row':
+          const rowsToDelete = new Set(selectedCells.map(cell => cell.row));
+          processedData = processedData.filter(row => !rowsToDelete.has(row._rowIndex));
+          break;
+
+        case 'Impute Value':
+          const column = selectedCells[0].col;
+          const colorScale = globalColorScales[column];
+          
+          // Create color picker overlay
+          const overlay = d3.select('body')
+            .append('div')
+            .style('position', 'fixed')
+            .style('top', '0')
+            .style('left', '0')
+            .style('width', '100%')
+            .style('height', '100%')
+            .style('background', 'rgba(0,0,0,0.8)')
+            .style('z-index', '2000');
+
+          const picker = overlay
+            .append('div')
+            .style('position', 'absolute')
+            .style('top', '50%')
+            .style('left', '50%')
+            .style('transform', 'translate(-50%, -50%)')
+            .style('background', 'white')
+            .style('padding', '20px')
+            .style('border-radius', '5px');
+
+          // Create color scale visualization
+          const scaleWidth = 300;
+          const scaleHeight = 40;
+
+          if (colorScale.type === 'numerical') {
+            const domain = colorScale.scale.domain();
+            const gradientScale = d3.scaleLinear()
+              .domain(domain)
+              .range([0, scaleWidth]);
+
+            const gradient = picker.append('svg')
+              .attr('width', scaleWidth)
+              .attr('height', scaleHeight)
+              .append('defs')
+              .append('linearGradient')
+              .attr('id', 'color-gradient')
+              .attr('x1', '0%')
+              .attr('x2', '100%');
+
+            const stops = d3.range(0, 1.1, 0.1).map(t => ({
+              offset: t * 100 + '%',
+              color: colorScale.scale(d3.quantile(domain, t))
+            }));
+
+            gradient.selectAll('stop')
+              .data(stops)
+              .enter()
+              .append('stop')
+              .attr('offset', d => d.offset)
+              .attr('stop-color', d => d.color);
+
+            picker.select('svg')
+              .append('rect')
+              .attr('width', scaleWidth)
+              .attr('height', scaleHeight)
+              .style('fill', 'url(#color-gradient)')
+              .on('click', function(event) {
+                const x = event.offsetX;
+                const value = gradientScale.invert(x);
+                
+                // Update all selected cells
+                selectedCells.forEach(cell => {
+                  processedData[cell.row][cell.col] = value.toFixed(2);
+                });
+                
+                overlay.remove();
+                selectedEmptyCells.clear();
+                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+              });
+
+          } else if (colorScale.type === 'categorical') {
+            const categories = colorScale.scale.domain();
+            
+            picker.selectAll('.category')
+              .data(categories)
+              .enter()
+              .append('div')
+              .style('cursor', 'pointer')
+              .style('padding', '5px')
+              .style('margin', '5px')
+              .style('background-color', d => colorScale.scale(d))
+              .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
+              .text(d => d)
+              .on('click', function(event, d) {
+                selectedCells.forEach(cell => {
+                  processedData[cell.row][cell.col] = d;
+                });
+                
+                overlay.remove();
+                selectedEmptyCells.clear();
+                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+              });
           }
-        }
-      });
-
-      // Clear selection and redraw
-      selectedExtraValues.clear();
-      visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-    }
-
-    // Function to convert processed data back to CSV
-    function convertProcessedDataToCSV(data, headers) {
-      const csvRows = [headers.join(',')];
-      
-      data.forEach(row => {
-        const values = headers.map(header => row[header] || '');
-        if (row._extraValues) {
-          values.push(...row._extraValues);
-        }
-        csvRows.push(values.join(','));
-      });
-      
-      return csvRows.join('\n');
+      }
+      if (action !== 'Impute Value') {
+        selectedEmptyCells.clear();
+        visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+      }
     }
 
     // Draw cells
     processedData.forEach((row) => {
       let xPos = 10;
       
-      // Draw regular columns
       columns.forEach((col) => {
         const value = row[col];
         const isMissing = !value || value.trim() === '';
         const colorScale = globalColorScales[col];
 
-        let color;
-        if (isMissing) {
-          color = '#ff0000';
-        } else {
-          try {
-            if (colorScale.type === 'numerical') {
-              const numValue = +value;
-              color = !isNaN(numValue) ? colorScale.scale(numValue) : '#ff0000';
-            } else if (colorScale.type === 'categorical') {
-              color = colorScale.scale(value);
-            }
-          } catch (err) {
-            console.warn(`Error applying color scale for column ${col}:`, err);
-            color = '#cccccc';
-          }
-        }
+        let color = isMissing ? '#ff0000' : 
+          colorScale.type === 'numerical' ? 
+            (!isNaN(+value) ? colorScale.scale(+value) : '#ff0000') :
+            colorScale.scale(value);
 
         const rect = svg.append('rect')
           .attr('x', xPos)
@@ -370,110 +450,43 @@ function visualizeCSVData(csvData) {
           .attr('data-row', row._rowIndex);
 
         if (isMissing) {
-          rect.style('stroke', '#880000')
-              .style('stroke-width', '1px');
+          const cellId = `${row._rowIndex}-${col}`;
+          
+          rect.style('stroke', selectedEmptyCells.has(cellId) ? '#00ff00' : '#880000')
+              .style('stroke-width', '1px')
+              .style('cursor', 'pointer')
+              .on('click', function(event) {
+                if (event.ctrlKey || event.metaKey) {
+                  if (selectedEmptyCells.has(cellId)) {
+                    selectedEmptyCells.delete(cellId);
+                    d3.select(this).style('stroke', '#880000');
+                  } else {
+                    selectedEmptyCells.add(cellId);
+                    d3.select(this).style('stroke', '#00ff00');
+                  }
+                } else {
+                  selectedEmptyCells.clear();
+                  svg.selectAll('.grid-cell').style('stroke', '#880000');
+                  selectedEmptyCells.add(cellId);
+                  d3.select(this).style('stroke', '#00ff00');
+                }
+              })
+              .on('contextmenu', function(event) {
+                event.preventDefault();
+                if (selectedEmptyCells.size > 0) {
+                  emptyContextMenu
+                    .style('display', 'block')
+                    .style('left', (event.pageX + 5) + 'px')
+                    .style('top', (event.pageY + 5) + 'px');
+                }
+              });
         }
 
         rect.append('title')
            .text(`${col}: ${isMissing ? 'Missing value' : value}`);
 
-        // Make empty cells droppable
-        if (isMissing) {
-          rect.attr('class', 'grid-cell droppable')
-              .on('dragover', function(event) {
-                event.preventDefault();
-                d3.select(this).style('stroke', '#00ff00');
-              })
-              .on('dragleave', function() {
-                d3.select(this).style('stroke', '#880000');
-              })
-              .on('drop', function(event) {
-                event.preventDefault();
-                const sourceId = event.dataTransfer.getData('text/plain');
-                const [sourceRow, sourceIndex] = sourceId.split('-');
-                
-                // Update data
-                const sourceRowData = processedData[sourceRow];
-                const droppedValue = sourceRowData._extraValues[sourceIndex];
-                
-                // Update the target cell
-                row[col] = droppedValue;
-                
-                // Remove the value from extra values
-                sourceRowData._extraValues.splice(sourceIndex, 1);
-                if (sourceRowData._extraValues.length === 0) {
-                  delete sourceRowData._extraValues;
-                  delete sourceRowData._extraValuesStartIndex;
-                }
-                
-                // Redraw the visualization
-                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-              });
-        }
-
         xPos += rectSize + gap;
       });
-
-      // Draw extra values if they exist
-      if (row._extraValues) {
-        // Calculate position for extra values
-        const extraXPos = 10 + (columns.length * (rectSize + gap));
-        
-        row._extraValues.forEach((value, i) => {
-          const extraId = `${row._rowIndex}-${i}`;
-          
-          const extraRect = svg.append('rect')
-            .attr('x', extraXPos + (i * (rectSize + gap)))
-            .attr('y', yPos)
-            .attr('width', rectSize)
-            .attr('height', rectSize)
-            .attr('fill', '#ff0000')
-            .attr('class', 'extra-value')
-            .attr('data-id', extraId)
-            .style('cursor', 'pointer')
-            .style('stroke', selectedExtraValues.has(extraId) ? '#00ff00' : '#880000')
-            .style('stroke-width', '1px')
-            .attr('draggable', true)
-            .on('dragstart', function(event) {
-              event.dataTransfer.setData('text/plain', extraId);
-              event.dataTransfer.effectAllowed = 'move';
-            })
-            .on('click', function(event) {
-              const id = d3.select(this).attr('data-id');
-              if (event.ctrlKey || event.metaKey) {
-                // Toggle selection
-                if (selectedExtraValues.has(id)) {
-                  selectedExtraValues.delete(id);
-                  d3.select(this).style('stroke', '#880000');
-                } else {
-                  selectedExtraValues.add(id);
-                  d3.select(this).style('stroke', '#00ff00');
-                }
-              } else {
-                // Clear previous selection
-                selectedExtraValues.clear();
-                svg.selectAll('.extra-value').style('stroke', '#880000');
-                // Select this item
-                selectedExtraValues.add(id);
-                d3.select(this).style('stroke', '#00ff00');
-              }
-            })
-            .on('contextmenu', function(event) {
-              event.preventDefault();
-              if (selectedExtraValues.size > 0) {
-                contextMenu
-                  .style('display', 'block')
-                  .style('left', (event.pageX + 5) + 'px')
-                  .style('top', (event.pageY + 5) + 'px');
-              }
-            });
-
-          extraRect.append('title')
-            .text(`Extra value: ${value}`);
-
-          maxXPos = Math.max(maxXPos, extraXPos + (i * (rectSize + gap)) + rectSize);
-        });
-      }
 
       maxXPos = Math.max(maxXPos, xPos);
       yPos += rectSize + gap;
@@ -481,8 +494,8 @@ function visualizeCSVData(csvData) {
 
     // Hide context menu when clicking outside
     d3.select('body').on('click', function(event) {
-      if (!event.target.closest('.extra-values-menu')) {
-        contextMenu.style('display', 'none');
+      if (!event.target.closest('.empty-cell-menu')) {
+        emptyContextMenu.style('display', 'none');
       }
     });
 
@@ -496,85 +509,23 @@ function visualizeCSVData(csvData) {
   }
 }
 
+function convertProcessedDataToCSV(data, headers) {
+  const csvRows = [headers.join(',')];
+  
+  data.forEach(row => {
+    const values = headers.map(header => row[header] || '');
+    if (row._extraValues) {
+      values.push(...row._extraValues);
+    }
+    csvRows.push(values.join(','));
+  });
+  
+  return csvRows.join('\n');
+}
+
 // Store the original data order for reference
 let originalDataOrder = null;
 let currentClusteredData = null;
-
-// function synchronizeGridViews(clusterData) {
-//   if (!csvFileData || !clusterData || !clusterData.blocks) return;
-  
-//   const data = d3.csvParse(csvFileData);
-//   currentClusteredData = clusterData;
-  
-//   // Store original order if not already stored
-//   if (!originalDataOrder) {
-//     originalDataOrder = {
-//       rows: data.map((_, i) => i),
-//       columns: data.columns.slice()
-//     };
-//   }
-
-//   // Get unique row clusters in order
-//   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
-  
-//   // Create ordered arrays for rows and columns
-//   let rowOrder = [];
-//   let columnOrder = new Set();
-  
-//   // Process blocks by row cluster order
-//   rowClusters.forEach(rowCluster => {
-//     // Get all blocks for this row cluster
-//     const clusterBlocks = Object.entries(clusterData.blocks)
-//       .filter(([key]) => key.split(',')[0] === rowCluster);
-    
-//     // Calculate number of rows in this cluster from first block
-//     if (clusterBlocks.length > 0) {
-//       const rowCount = clusterBlocks[0][1].data.length;
-//       const startIdx = rowOrder.length;
-      
-//       // Add indices for all rows in this cluster
-//       for (let i = 0; i < rowCount; i++) {
-//         rowOrder.push(startIdx + i);
-//       }
-      
-//       // Add columns from all blocks in this cluster
-//       clusterBlocks.forEach(([_, block]) => {
-//         if (block.columns) {
-//           block.columns.forEach(col => columnOrder.add(col));
-//         }
-//       });
-//     }
-//   });
-
-//   // Reorder the data based on clustering
-//   const reorderedData = rowOrder.map(i => {
-//     if (i < data.length) {
-//       return data[i];
-//     }
-//     // Handle case where index is out of bounds
-//     console.warn(`Row index ${i} is out of bounds`);
-//     return data[data.length - 1]; // Use last row as fallback
-//   });
-  
-//   const reorderedColumns = Array.from(columnOrder);
-  
-//   // Create new CSV string with reordered data
-//   const reorderedCsv = d3.csvFormat(reorderedData.map(row => {
-//     const newRow = {};
-//     reorderedColumns.forEach(col => {
-//       if (row.hasOwnProperty(col)) {
-//         newRow[col] = row[col];
-//       }
-//     });
-//     return newRow;
-//   }));
-
-//   // Update visualizations with reordered data
-//   visualizeCSVData(reorderedCsv);
-  
-//   // Add visual cluster boundaries
-//   addClusterBoundaries(rowClusters, reorderedData.length);
-// }
 
 function synchronizeGridViews(clusterData) {
   if (!csvFileData || !clusterData || !clusterData.blocks) return;
