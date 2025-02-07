@@ -11,6 +11,8 @@ let activeNumericalFilters = {
 };
 let selectedColumns = new Set(); // Store selected column names
 let allColumns = []; // Store all column names
+// Global variable to store selected empty cells
+let selectedEmptyCells = new Set();
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -296,134 +298,338 @@ function visualizeCSVData(csvData) {
     let yPos = 20;
     let maxXPos = 0;
 
+    // function handleEmptyContextMenuClick(event, action) {
+    //   emptyContextMenu.style('display', 'none');
+      
+    //   if (selectedEmptyCells.size === 0) return;
+
+    //   const selectedCells = Array.from(selectedEmptyCells).map(id => {
+    //     const [row, col] = id.split('-');
+    //     return { row: parseInt(row), col };
+    //   });
+
+    //   switch(action) {
+    //     case 'Delete Column':
+    //       const columnsToDelete = new Set(selectedCells.map(cell => cell.col));
+    //       headers = headers.filter(h => !columnsToDelete.has(h));
+    //       processedData.forEach(row => {
+    //         columnsToDelete.forEach(col => delete row[col]);
+    //       });
+    //       break;
+
+    //     case 'Delete Row':
+    //       const rowsToDelete = new Set(selectedCells.map(cell => cell.row));
+    //       processedData = processedData.filter(row => !rowsToDelete.has(row._rowIndex));
+    //       break;
+
+    //     case 'Impute Value':
+    //       const column = selectedCells[0].col;
+    //       const colorScale = globalColorScales[column];
+          
+    //       // Create color picker overlay
+    //       const overlay = d3.select('body')
+    //         .append('div')
+    //         .style('position', 'fixed')
+    //         .style('top', '0')
+    //         .style('left', '0')
+    //         .style('width', '100%')
+    //         .style('height', '100%')
+    //         .style('background', 'rgba(0,0,0,0.8)')
+    //         .style('z-index', '2000');
+
+    //       const picker = overlay
+    //         .append('div')
+    //         .style('position', 'absolute')
+    //         .style('top', '50%')
+    //         .style('left', '50%')
+    //         .style('transform', 'translate(-50%, -50%)')
+    //         .style('background', 'white')
+    //         .style('padding', '20px')
+    //         .style('border-radius', '5px');
+
+    //       // Create color scale visualization
+    //       const scaleWidth = 300;
+    //       const scaleHeight = 40;
+
+    //       if (colorScale.type === 'numerical') {
+    //         const domain = colorScale.scale.domain();
+    //         const gradientScale = d3.scaleLinear()
+    //           .domain(domain)
+    //           .range([0, scaleWidth]);
+
+    //         const gradient = picker.append('svg')
+    //           .attr('width', scaleWidth)
+    //           .attr('height', scaleHeight)
+    //           .append('defs')
+    //           .append('linearGradient')
+    //           .attr('id', 'color-gradient')
+    //           .attr('x1', '0%')
+    //           .attr('x2', '100%');
+
+    //         const stops = d3.range(0, 1.1, 0.1).map(t => ({
+    //           offset: t * 100 + '%',
+    //           color: colorScale.scale(d3.quantile(domain, t))
+    //         }));
+
+    //         gradient.selectAll('stop')
+    //           .data(stops)
+    //           .enter()
+    //           .append('stop')
+    //           .attr('offset', d => d.offset)
+    //           .attr('stop-color', d => d.color);
+
+    //         picker.select('svg')
+    //           .append('rect')
+    //           .attr('width', scaleWidth)
+    //           .attr('height', scaleHeight)
+    //           .style('fill', 'url(#color-gradient)')
+    //           .on('click', function(event) {
+    //             const x = event.offsetX;
+    //             const value = gradientScale.invert(x);
+                
+    //             // Update all selected cells
+    //             selectedCells.forEach(cell => {
+    //               processedData[cell.row][cell.col] = value.toFixed(2);
+    //             });
+                
+    //             overlay.remove();
+    //             selectedEmptyCells.clear();
+    //             visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+    //           });
+
+    //       } else if (colorScale.type === 'categorical') {
+    //         const categories = colorScale.scale.domain();
+            
+    //         picker.selectAll('.category')
+    //           .data(categories)
+    //           .enter()
+    //           .append('div')
+    //           .style('cursor', 'pointer')
+    //           .style('padding', '5px')
+    //           .style('margin', '5px')
+    //           .style('background-color', d => colorScale.scale(d))
+    //           .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
+    //           .text(d => d)
+    //           .on('click', function(event, d) {
+    //             selectedCells.forEach(cell => {
+    //               processedData[cell.row][cell.col] = d;
+    //             });
+                
+    //             overlay.remove();
+    //             selectedEmptyCells.clear();
+    //             visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+    //           });
+    //       }
+    //   }
+    //   if (action !== 'Impute Value') {
+    //     selectedEmptyCells.clear();
+    //     visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+    //   }
+    // }
+
     function handleEmptyContextMenuClick(event, action) {
       emptyContextMenu.style('display', 'none');
       
       if (selectedEmptyCells.size === 0) return;
-
+    
       const selectedCells = Array.from(selectedEmptyCells).map(id => {
         const [row, col] = id.split('-');
         return { row: parseInt(row), col };
       });
-
+    
+      // Parse the current CSV data
+      const data = d3.csvParse(csvFileData);
+      const headers = data.columns;
+    
+      // Prevent immediate execution for impute value
+      if (action === 'Impute Value') {
+        const column = selectedCells[0].col;
+        const colorScale = globalColorScales[column];
+        
+        // Create color picker overlay
+        const overlay = d3.select('body')
+          .append('div')
+          .style('position', 'fixed')
+          .style('top', '0')
+          .style('left', '0')
+          .style('width', '100%')
+          .style('height', '100%')
+          .style('background', 'rgba(0,0,0,0.8)')
+          .style('z-index', '2000');
+    
+        const picker = overlay
+          .append('div')
+          .style('position', 'absolute')
+          .style('top', '50%')
+          .style('left', '50%')
+          .style('transform', 'translate(-50%, -50%)')
+          .style('background', 'white')
+          .style('padding', '20px')
+          .style('border-radius', '5px');
+    
+        if (colorScale.type === 'numerical') {
+          const scaleWidth = 300;
+          const scaleHeight = 40;
+          const domain = colorScale.scale.domain();
+          const gradientScale = d3.scaleLinear()
+            .domain(domain)
+            .range([0, scaleWidth]);
+    
+          // Use a unique ID for the gradient
+          const gradientId = `color-gradient-${Date.now()}`;
+          
+          const gradient = picker.append('svg')
+            .attr('width', scaleWidth)
+            .attr('height', scaleHeight + 20) // Add space for labels
+            .append('defs')
+            .append('linearGradient')
+            .attr('id', gradientId)
+            .attr('x1', '0%')
+            .attr('x2', '100%');
+    
+          // Use the column-specific color scale for the gradient stops
+          const stops = d3.range(0, 1.1, 0.1).map(t => {
+            const value = d3.quantile(domain, t);
+            return {
+              offset: t * 100 + '%',
+              color: colorScale.scale(value),
+              value: value
+            };
+          });
+    
+          gradient.selectAll('stop')
+            .data(stops)
+            .enter()
+            .append('stop')
+            .attr('offset', d => d.offset)
+            .attr('stop-color', d => d.color);
+    
+          const svg = picker.select('svg');
+          
+          svg.append('rect')
+            .attr('width', scaleWidth)
+            .attr('height', scaleHeight)
+            .style('fill', `url(#${gradientId})`)
+            .on('click', function(event) {
+              const x = event.offsetX;
+              const value = gradientScale.invert(x);
+              
+              // Update the actual data with the imputed value
+              selectedCells.forEach(cell => {
+                const rowData = data[cell.row];
+                if (rowData) {
+                  rowData[cell.col] = value.toFixed(2);
+                }
+              });
+              
+              // Update the CSV file data
+              csvFileData = d3.csvFormat(data);
+              
+              overlay.remove();
+              selectedEmptyCells.clear();
+              
+              // Refresh visualizations with the updated data
+              visualizeCSVData(csvFileData);
+              if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+                updateGridSummary();
+              }
+            });
+    
+          // Add value labels
+          svg.selectAll('.value-label')
+            .data([stops[0], stops[stops.length - 1]])
+            .enter()
+            .append('text')
+            .attr('class', 'value-label')
+            .attr('x', (d, i) => i === 0 ? 0 : scaleWidth)
+            .attr('y', scaleHeight + 15)
+            .attr('text-anchor', (d, i) => i === 0 ? 'start' : 'end')
+            .style('font-size', '12px')
+            .text(d => d.value.toFixed(2));
+    
+        } else if (colorScale.type === 'categorical') {
+          const categories = colorScale.scale.domain();
+          
+          picker.selectAll('.category')
+            .data(categories)
+            .enter()
+            .append('div')
+            .style('cursor', 'pointer')
+            .style('padding', '5px')
+            .style('margin', '5px')
+            .style('background-color', d => colorScale.scale(d))
+            .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
+            .text(d => d)
+            .on('click', function(event, d) {
+              // Update the actual data with the imputed value
+              selectedCells.forEach(cell => {
+                const rowData = data[cell.row];
+                if (rowData) {
+                  rowData[cell.col] = d;
+                }
+              });
+              
+              // Update the CSV file data
+              csvFileData = d3.csvFormat(data);
+              
+              overlay.remove();
+              selectedEmptyCells.clear();
+              
+              // Refresh visualizations with the updated data
+              visualizeCSVData(csvFileData);
+              if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+                updateGridSummary();
+              }
+            });
+        }
+        return;
+      }
+    
       switch(action) {
         case 'Delete Column':
           const columnsToDelete = new Set(selectedCells.map(cell => cell.col));
-          headers = headers.filter(h => !columnsToDelete.has(h));
-          processedData.forEach(row => {
-            columnsToDelete.forEach(col => delete row[col]);
+          
+          // Filter out the columns to delete from the data
+          const newHeaders = headers.filter(h => !columnsToDelete.has(h));
+          const newData = data.map(row => {
+            const newRow = {};
+            newHeaders.forEach(header => {
+              if (!columnsToDelete.has(header)) {
+                newRow[header] = row[header];
+              }
+            });
+            return newRow;
           });
+          
+          // Update the CSV file data
+          csvFileData = d3.csvFormat(newData);
+          
+          // Update selected columns
+          columnsToDelete.forEach(col => selectedColumns.delete(col));
           break;
-
+    
         case 'Delete Row':
           const rowsToDelete = new Set(selectedCells.map(cell => cell.row));
-          processedData = processedData.filter(row => !rowsToDelete.has(row._rowIndex));
-          break;
-
-        case 'Impute Value':
-          const column = selectedCells[0].col;
-          const colorScale = globalColorScales[column];
           
-          // Create color picker overlay
-          const overlay = d3.select('body')
-            .append('div')
-            .style('position', 'fixed')
-            .style('top', '0')
-            .style('left', '0')
-            .style('width', '100%')
-            .style('height', '100%')
-            .style('background', 'rgba(0,0,0,0.8)')
-            .style('z-index', '2000');
-
-          const picker = overlay
-            .append('div')
-            .style('position', 'absolute')
-            .style('top', '50%')
-            .style('left', '50%')
-            .style('transform', 'translate(-50%, -50%)')
-            .style('background', 'white')
-            .style('padding', '20px')
-            .style('border-radius', '5px');
-
-          // Create color scale visualization
-          const scaleWidth = 300;
-          const scaleHeight = 40;
-
-          if (colorScale.type === 'numerical') {
-            const domain = colorScale.scale.domain();
-            const gradientScale = d3.scaleLinear()
-              .domain(domain)
-              .range([0, scaleWidth]);
-
-            const gradient = picker.append('svg')
-              .attr('width', scaleWidth)
-              .attr('height', scaleHeight)
-              .append('defs')
-              .append('linearGradient')
-              .attr('id', 'color-gradient')
-              .attr('x1', '0%')
-              .attr('x2', '100%');
-
-            const stops = d3.range(0, 1.1, 0.1).map(t => ({
-              offset: t * 100 + '%',
-              color: colorScale.scale(d3.quantile(domain, t))
-            }));
-
-            gradient.selectAll('stop')
-              .data(stops)
-              .enter()
-              .append('stop')
-              .attr('offset', d => d.offset)
-              .attr('stop-color', d => d.color);
-
-            picker.select('svg')
-              .append('rect')
-              .attr('width', scaleWidth)
-              .attr('height', scaleHeight)
-              .style('fill', 'url(#color-gradient)')
-              .on('click', function(event) {
-                const x = event.offsetX;
-                const value = gradientScale.invert(x);
-                
-                // Update all selected cells
-                selectedCells.forEach(cell => {
-                  processedData[cell.row][cell.col] = value.toFixed(2);
-                });
-                
-                overlay.remove();
-                selectedEmptyCells.clear();
-                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-              });
-
-          } else if (colorScale.type === 'categorical') {
-            const categories = colorScale.scale.domain();
-            
-            picker.selectAll('.category')
-              .data(categories)
-              .enter()
-              .append('div')
-              .style('cursor', 'pointer')
-              .style('padding', '5px')
-              .style('margin', '5px')
-              .style('background-color', d => colorScale.scale(d))
-              .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
-              .text(d => d)
-              .on('click', function(event, d) {
-                selectedCells.forEach(cell => {
-                  processedData[cell.row][cell.col] = d;
-                });
-                
-                overlay.remove();
-                selectedEmptyCells.clear();
-                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-              });
-          }
+          // Filter out the rows to delete
+          const filteredData = data.filter((_, index) => !rowsToDelete.has(index));
+          
+          // Update the CSV file data
+          csvFileData = d3.csvFormat(filteredData);
+          break;
       }
-      if (action !== 'Impute Value') {
-        selectedEmptyCells.clear();
-        visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
+    
+      // Refresh visualizations with the updated data
+      visualizeCSVData(csvFileData);
+      if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+        updateGridSummary();
       }
+      
+      // Clear selection
+      selectedEmptyCells.clear();
     }
+    
+
 
     // Draw cells
     processedData.forEach((row) => {
@@ -507,6 +713,27 @@ function visualizeCSVData(csvData) {
   } catch (error) {
     console.error('Error visualizing CSV data:', error);
   }
+}
+
+// Helper function to update grid summary
+function updateGridSummary() {
+  const formData = new FormData();
+  const blob = new Blob([csvFileData], { type: 'text/csv' });
+  formData.append('file', new File([blob], 'updated.csv', { type: 'text/csv' }));
+  formData.append('rowClusters', document.getElementById('rowClusters').value);
+  formData.append('colClusters', document.getElementById('colClusters').value);
+
+  fetch('/get_clusters', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (!data.error) {
+      visualizeGridSummary(data);
+    }
+  })
+  .catch(error => console.error('Error:', error));
 }
 
 function convertProcessedDataToCSV(data, headers) {
