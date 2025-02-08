@@ -1170,8 +1170,6 @@ function visualizeBlockDetails(blockData, blockType, columns) {
 }
 
 function createLegends(colorScales) {
-  // console.log('Creating legends with scales:', colorScales);
-  
   // Remove any existing legends
   d3.select('.control-panel').selectAll('.legend-container').remove();
   
@@ -1193,8 +1191,6 @@ function createLegends(colorScales) {
     .filter(([_, scale]) => scale.type === 'numerical')
     .map(([column, _]) => column);
 
-  // console.log('Numerical columns:', numericalColumns);
-
   // Add column selector dropdown
   const dropdownContainer = numericalBox.append('div')
     .style('margin-bottom', '10px');
@@ -1209,7 +1205,6 @@ function createLegends(colorScales) {
     .style('margin-bottom', '5px')
     .on('change', function() {
       const selectedColumn = this.value;
-      // console.log('Selected numerical column:', selectedColumn);
       activeNumericalFilters.column = selectedColumn === 'Select a column...' ? null : selectedColumn;
       activeNumericalFilters.range = null;
       if (selectedColumn !== 'Select a column...') {
@@ -1236,7 +1231,6 @@ function createLegends(colorScales) {
     .style('display', 'none')
     .text('Clear Numerical Filter')
     .on('click', () => {
-      // console.log('Clearing numerical filter');
       activeNumericalFilters.column = null;
       activeNumericalFilters.range = null;
       d3.select('#numericalColumnSelect').property('value', 'Select a column...');
@@ -1249,153 +1243,171 @@ function createLegends(colorScales) {
 
   // Create categorical section
   const categoricalBox = legendContainer.append('div')
-    .attr('class', 'categorical-legend');
+    .attr('class', 'categorical-legend')
+    .style('margin-top', '20px');
     
   categoricalBox.append('h3')
     .style('font-size', '16px')
     .text('Categorical Values');
 
-  // Sort scales
-  const categoricalScales = {};
-  Object.entries(colorScales).forEach(([column, scale]) => {
-    if (scale.type === 'categorical') {
-      categoricalScales[column] = scale;
-    }
-  });
+  // Get categorical columns
+  const categoricalColumns = Object.entries(colorScales)
+    .filter(([_, scale]) => scale.type === 'categorical')
+    .map(([column, _]) => column);
 
-  // console.log('Categorical scales:', categoricalScales);
+  // Add categorical dropdown
+  const catDropdownContainer = categoricalBox.append('div')
+    .style('margin-bottom', '10px');
 
-  // Add interactive categorical legends
-  if (Object.keys(categoricalScales).length > 0) {
-    const uniqueSchemes = new Map();
-    Object.entries(categoricalScales).forEach(([column, scale]) => {
-      const schemeKey = scale.scale.range().join(',');
-      if (!uniqueSchemes.has(schemeKey)) {
-        uniqueSchemes.set(schemeKey, {
-          scale: scale.scale,
-          columns: [column]
-        });
-      } else {
-        uniqueSchemes.get(schemeKey).columns.push(column);
+  catDropdownContainer.append('select')
+    .attr('id', 'categoricalColumnSelect')
+    .style('width', '100%')
+    .style('padding', '5px')
+    .style('background-color', '#2c3e50')
+    .style('color', 'white')
+    .style('border', '1px solid #34495e')
+    .style('margin-bottom', '5px')
+    .on('change', function() {
+      const selectedColumn = this.value;
+      updateCategoricalLegend(selectedColumn === 'Select a column...' ? null : selectedColumn, colorScales);
+    })
+    .selectAll('option')
+    .data(['Select a column...'].concat(categoricalColumns))
+    .enter()
+    .append('option')
+    .text(d => d)
+    .property('disabled', d => d === 'Select a column...')
+    .property('selected', d => d === 'Select a column...');
+
+  // Add clear categorical filter button
+  const clearCatButton = categoricalBox.append('button')
+    .attr('id', 'clearCategoricalFilter')
+    .style('font-size', '0.8em')
+    .style('padding', '2px 5px')
+    .style('background-color', '#34495e')
+    .style('border', 'none')
+    .style('color', 'white')
+    .style('cursor', 'pointer')
+    .style('display', 'none')
+    .text('Clear Categorical Filter')
+    .on('click', () => {
+      const selectedColumn = d3.select('#categoricalColumnSelect').property('value');
+      if (selectedColumn !== 'Select a column...') {
+        activeFilters.delete(selectedColumn);
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(selectedColumn, colorScales);
       }
     });
 
-    uniqueSchemes.forEach((schemeInfo, schemeKey) => {
-      const schemeContainer = categoricalBox.append('div')
-        .attr('class', 'scheme-container');
-      
-      schemeContainer.append('div')
-        .style('font-size', '0.8em')
-        .style('margin-bottom', '3px')
-        .style('color', '#bdc3c7')
-        .text(`Columns: ${schemeInfo.columns.join(', ')}`);
-
-      // Add clear filters button
-      const clearButton = schemeContainer.append('button')
-        .style('font-size', '0.8em')
-        .style('margin-bottom', '5px')
-        .style('padding', '2px 5px')
-        .style('background-color', '#34495e')
-        .style('border', 'none')
-        .style('color', 'white')
-        .style('cursor', 'pointer')
-        .style('display', 'none')
-        .text('Clear Filters')
-        .on('click', () => {
-          // console.log('Clearing categorical filters for columns:', schemeInfo.columns);
-          schemeInfo.columns.forEach(column => {
-            activeFilters.delete(column);
-          });
-          updateVisualizationsWithFilters();
-          updateLegendStyles();
-        });
-
-      const swatchContainer = schemeContainer.append('div')
-        .style('display', 'flex')
-        .style('flex-direction', 'column')
-        .style('gap', '5px');
-
-      // Add interactive swatches
-      schemeInfo.scale.domain().forEach((value) => {
-        const swatchRow = swatchContainer.append('div')
-          .style('display', 'flex')
-          .style('align-items', 'center')
-          .style('gap', '5px')
-          .style('cursor', 'pointer')
-          .on('click', () => {
-            // console.log('Clicked categorical value:', value);
-            schemeInfo.columns.forEach(column => {
-              if (!activeFilters.has(column)) {
-                activeFilters.set(column, new Set([value]));
-              } else {
-                const columnFilters = activeFilters.get(column);
-                if (columnFilters.has(value)) {
-                  columnFilters.delete(value);
-                  if (columnFilters.size === 0) {
-                    activeFilters.delete(column);
-                  }
-                } else {
-                  columnFilters.add(value);
-                }
-              }
-            });
-            // console.log('Active filters after click:', Array.from(activeFilters.entries()));
-            updateVisualizationsWithFilters();
-            updateLegendStyles();
-          });
-
-        swatchRow.append('div')
-          .attr('class', 'color-swatch')
-          .style('width', '15px')
-          .style('height', '15px')
-          .style('background-color', schemeInfo.scale(value))
-          .style('border', '1px solid transparent');
-
-        swatchRow.append('span')
-          .style('font-size', '0.8em')
-          .text(value);
-      });
-
-      // Add "Other" swatch
-      const otherRow = swatchContainer.append('div')
-        .style('display', 'flex')
-        .style('align-items', 'center')
-        .style('gap', '5px')
-        .style('cursor', 'pointer')
-        .on('click', () => {
-          schemeInfo.columns.forEach(column => {
-            if (!activeFilters.has(column)) {
-              activeFilters.set(column, new Set(['OTHER']));
-            } else {
-              const columnFilters = activeFilters.get(column);
-              if (columnFilters.has('OTHER')) {
-                columnFilters.delete('OTHER');
-                if (columnFilters.size === 0) {
-                  activeFilters.delete(column);
-                }
-              } else {
-                columnFilters.add('OTHER');
-              }
-            }
-          });
-          updateVisualizationsWithFilters();
-          updateLegendStyles();
-        });
-
-      otherRow.append('div')
-        .attr('class', 'color-swatch')
-        .style('width', '15px')
-        .style('height', '15px')
-        .style('background-color', schemeInfo.scale.unknown())
-        .style('border', '1px solid transparent');
-
-      otherRow.append('span')
-        .style('font-size', '0.8em')
-        .text('Other');
-    });
-  }
+  // Create container for categorical swatches
+  categoricalBox.append('div')
+    .attr('class', 'categorical-swatches')
+    .style('margin-top', '10px');
 }
 
+function updateCategoricalLegend(column, colorScales) {
+  const swatchesContainer = d3.select('.categorical-swatches');
+  const clearButton = d3.select('#clearCategoricalFilter');
+  
+  // Clear existing swatches
+  swatchesContainer.selectAll('*').remove();
+  
+  if (!column) {
+    clearButton.style('display', 'none');
+    return;
+  }
+
+  const scale = colorScales[column];
+  
+  // Create swatches for each value
+  const swatchContainer = swatchesContainer.append('div')
+    .style('display', 'flex')
+    .style('flex-direction', 'column')
+    .style('gap', '5px');
+
+  // Add swatches for each value in the domain
+  scale.scale.domain().forEach((value) => {
+    const swatchRow = swatchContainer.append('div')
+      .style('display', 'flex')
+      .style('align-items', 'center')
+      .style('gap', '5px')
+      .style('cursor', 'pointer')
+      .on('click', () => {
+        if (!activeFilters.has(column)) {
+          activeFilters.set(column, new Set([value]));
+        } else {
+          const columnFilters = activeFilters.get(column);
+          if (columnFilters.has(value)) {
+            columnFilters.delete(value);
+            if (columnFilters.size === 0) {
+              activeFilters.delete(column);
+            }
+          } else {
+            columnFilters.add(value);
+          }
+        }
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(column, colorScales);
+      });
+
+    const isSelected = activeFilters.has(column) && activeFilters.get(column).has(value);
+
+    swatchRow.append('div')
+      .attr('class', 'color-swatch')
+      .style('width', '15px')
+      .style('height', '15px')
+      .style('background-color', scale.scale(value))
+      .style('border', isSelected ? '2px solid white' : '1px solid transparent');
+
+    swatchRow.append('span')
+      .style('font-size', '0.8em')
+      .style('color', isSelected ? '#3498db' : 'white')
+      .text(value);
+  });
+
+  // Add "Other" swatch if scale has unknown values
+  if (scale.scale.unknown) {
+    const otherRow = swatchContainer.append('div')
+      .style('display', 'flex')
+      .style('align-items', 'center')
+      .style('gap', '5px')
+      .style('cursor', 'pointer')
+      .on('click', () => {
+        if (!activeFilters.has(column)) {
+          activeFilters.set(column, new Set(['OTHER']));
+        } else {
+          const columnFilters = activeFilters.get(column);
+          if (columnFilters.has('OTHER')) {
+            columnFilters.delete('OTHER');
+            if (columnFilters.size === 0) {
+              activeFilters.delete(column);
+            }
+          } else {
+            columnFilters.add('OTHER');
+          }
+        }
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(column, colorScales);
+      });
+
+    const isOtherSelected = activeFilters.has(column) && activeFilters.get(column).has('OTHER');
+
+    otherRow.append('div')
+      .attr('class', 'color-swatch')
+      .style('width', '15px')
+      .style('height', '15px')
+      .style('background-color', scale.scale.unknown())
+      .style('border', isOtherSelected ? '2px solid white' : '1px solid transparent');
+
+    otherRow.append('span')
+      .style('font-size', '0.8em')
+      .style('color', isOtherSelected ? '#3498db' : 'white')
+      .text('Other');
+  }
+
+  // Show/hide clear button based on active filters
+  clearButton.style('display', activeFilters.has(column) ? 'block' : 'none');
+}
 
 function createNumericalLegend(container) {
   const gradientHeight = 15;
@@ -1775,62 +1787,6 @@ function updateLegendStyles() {
   });
 }
 
-// function updateVisualizationsWithFilters() {
-//   if (!csvFileData) return;
-
-//   const data = d3.csvParse(csvFileData);
-  
-//   // Filter the data based on both categorical and numerical filters
-//   const filteredData = data.filter(row => {
-//     // Check categorical filters
-//     const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
-//       const rowValue = row[column];
-//       return values.has(rowValue) || 
-//              (values.has('OTHER') && !globalColorScales[column].scale.domain().includes(rowValue));
-//     });
-    
-//     // Check numerical filter if active
-//     let numericalMatch = true;
-//     if (activeNumericalFilters.column && activeNumericalFilters.range) {
-//       const value = +row[activeNumericalFilters.column];
-//       numericalMatch = value >= activeNumericalFilters.range[0] && 
-//                       value <= activeNumericalFilters.range[1];
-//     }
-    
-//     return categoricalMatch && numericalMatch;
-//   });
-
-//   // Convert filtered data back to CSV
-//   const filteredCsvData = d3.csvFormat(filteredData);
-
-//   // Update visualizations with filtered data
-//   visualizeCSVData(filteredCsvData);
-  
-//   // Update grid summary if active
-//   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
-//     const formData = new FormData();
-//     const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
-//     formData.append('file', filteredBlob, 'filtered.csv');
-//     formData.append('rowClusters', document.getElementById('rowClusters').value);
-//     formData.append('colClusters', document.getElementById('colClusters').value);
-
-//     fetch('/get_clusters', {
-//       method: 'POST',
-//       body: formData
-//     })
-//     .then(response => response.json())
-//     .then(data => {
-//       if (!data.error) {
-//         visualizeGridSummary(data);
-//       }
-//     })
-//     .catch(error => console.error('Error:', error));
-//   }
-  
-//   // Update both legend styles
-//   updateLegendStyles();
-//   updateNumericalLegendStyles();
-// }
 
 function updateVisualizationsWithFilters() {
   if (!csvFileData) return;
@@ -2096,74 +2052,6 @@ let currentSortConfig = {
   column: null,
   direction: null
 };
-
-// // Add this function
-// function initializeSortingControls(data) {
-//   if (!data || !data.length) return;
-  
-//   // Get column names from the first row of data
-//   const columns = Object.keys(data[0] || {});
-  
-//   // Remove any existing sorting controls
-//   d3.select('.sorting-container').selectAll('.sorting-controls').remove();
-  
-//   // Create the controls container
-//   const sortingControls = d3.select('.sorting-container')
-//     .append('div')
-//     .attr('class', 'sorting-controls');
-
-//   // Add column selector dropdown
-//   const columnSelect = sortingControls.append('select')
-//     .attr('id', 'sortColumnSelect')
-//     .attr('class', 'sorting-select')
-//     .on('change', function() {
-//       const selectedColumn = this.value;
-//       const sortDirection = d3.select('#sortDirectionSelect').property('value');
-//       if (selectedColumn !== 'Select a column...') {
-//         updateSorting(selectedColumn, sortDirection);
-//       }
-//     });
-
-//   // Add options to column selector
-//   columnSelect.selectAll('option')
-//     .data(['Select a column...'].concat(columns))
-//     .enter()
-//     .append('option')
-//     .text(d => d)
-//     .property('disabled', d => d === 'Select a column...')
-//     .property('selected', d => d === 'Select a column...');
-
-//   // Add sort direction selector
-//   const directionSelect = sortingControls.append('select')
-//     .attr('id', 'sortDirectionSelect')
-//     .attr('class', 'sorting-select')
-//     .on('change', function() {
-//       const selectedColumn = d3.select('#sortColumnSelect').property('value');
-//       const sortDirection = this.value;
-//       if (selectedColumn !== 'Select a column...') {
-//         updateSorting(selectedColumn, sortDirection);
-//       }
-//     });
-
-//   // Add direction options
-//   directionSelect.selectAll('option')
-//     .data(['Ascending', 'Descending'])
-//     .enter()
-//     .append('option')
-//     .text(d => d)
-//     .property('value', d => d.toLowerCase());
-
-//   // Add clear sorting button
-//   sortingControls.append('button')
-//     .attr('id', 'clearSorting')
-//     .attr('class', 'sorting-button')
-//     .text('Clear Sorting')
-//     .on('click', () => {
-//       d3.select('#sortColumnSelect').property('value', 'Select a column...');
-//       d3.select('#sortDirectionSelect').property('value', 'ascending');
-//       resetSorting();
-//     });
-// }
 
 
 function updateSortingControlsForBlocks() {
