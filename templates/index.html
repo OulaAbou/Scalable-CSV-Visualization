@@ -270,6 +270,53 @@
         justify-content: center;
         align-items: center;
       }
+
+      /* New sorting styles */
+      .sorting-container {
+        background-color: #34495e;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 20px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .sorting-container h3 {
+        font-size: 16px;
+        margin: 0 0 10px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .sorting-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .sorting-select {
+        width: 100%;
+        padding: 5px;
+        border-radius: 4px;
+        background-color: #2c3e50;
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .sorting-button {
+        font-size: 0.8em;
+        padding: 5px 10px;
+        background-color: #2c3e50;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .sorting-button:hover {
+        background-color: #3d5871;
+      }
    </style>
  </head>
  <body>
@@ -291,18 +338,34 @@
      <label for="colClusters">Set Column Clusters:</label>
      <input type="range" id="colClusters" name="colClusters" min="1" max="10" value="5">
      <span id="colClustersValue">5</span>
+
+     <!-- Sorting Controls -->
+     <div class="sorting-container">
+       <h3>Sort Data</h3>
+       <div class="sorting-controls">
+         <select id="sortColumnSelect" class="sorting-select">
+           <option disabled selected>Select a column...</option>
+         </select>
+         <select id="sortDirectionSelect" class="sorting-select">
+           <option value="ascending">Ascending</option>
+           <option value="descending">Descending</option>
+         </select>
+         <button id="clearSorting" class="sorting-button">Clear Sorting</button>
+       </div>
+     </div>
+
      <div class="vsm-controls">
       <label>Visual Similarity Matrix:</label>
       <select id="vsmType" class="vsm-select">
         <option value="columns">Columns</option>
         <option value="rows">Rows</option>
       </select>
-    </div>
+     </div>
     
-    <div class="vsm-container">
-      <h3>Visual Similarity Matrix</h3>
-      <div id="vsmCanvas"></div>
-    </div>
+     <div class="vsm-container">
+       <h3>Visual Similarity Matrix</h3>
+       <div id="vsmCanvas"></div>
+     </div>
    </div>
    <div class="main-content">
     <div class="container-wrapper">
@@ -316,7 +379,7 @@
         </div>
       </div>
     </div>
-  </div>
+   </div>
 
    <script src="https://d3js.org/d3.v7.min.js"></script>
    <script src="../static/index.js"></script>
