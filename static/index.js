@@ -1955,17 +1955,186 @@ let currentSortConfig = {
   direction: null
 };
 
-// Add this function
+// // Add this function
+// function initializeSortingControls(data) {
+//   if (!data || !data.length) return;
+  
+//   // Get column names from the first row of data
+//   const columns = Object.keys(data[0] || {});
+  
+//   // Remove any existing sorting controls
+//   d3.select('.sorting-container').selectAll('.sorting-controls').remove();
+  
+//   // Create the controls container
+//   const sortingControls = d3.select('.sorting-container')
+//     .append('div')
+//     .attr('class', 'sorting-controls');
+
+//   // Add column selector dropdown
+//   const columnSelect = sortingControls.append('select')
+//     .attr('id', 'sortColumnSelect')
+//     .attr('class', 'sorting-select')
+//     .on('change', function() {
+//       const selectedColumn = this.value;
+//       const sortDirection = d3.select('#sortDirectionSelect').property('value');
+//       if (selectedColumn !== 'Select a column...') {
+//         updateSorting(selectedColumn, sortDirection);
+//       }
+//     });
+
+//   // Add options to column selector
+//   columnSelect.selectAll('option')
+//     .data(['Select a column...'].concat(columns))
+//     .enter()
+//     .append('option')
+//     .text(d => d)
+//     .property('disabled', d => d === 'Select a column...')
+//     .property('selected', d => d === 'Select a column...');
+
+//   // Add sort direction selector
+//   const directionSelect = sortingControls.append('select')
+//     .attr('id', 'sortDirectionSelect')
+//     .attr('class', 'sorting-select')
+//     .on('change', function() {
+//       const selectedColumn = d3.select('#sortColumnSelect').property('value');
+//       const sortDirection = this.value;
+//       if (selectedColumn !== 'Select a column...') {
+//         updateSorting(selectedColumn, sortDirection);
+//       }
+//     });
+
+//   // Add direction options
+//   directionSelect.selectAll('option')
+//     .data(['Ascending', 'Descending'])
+//     .enter()
+//     .append('option')
+//     .text(d => d)
+//     .property('value', d => d.toLowerCase());
+
+//   // Add clear sorting button
+//   sortingControls.append('button')
+//     .attr('id', 'clearSorting')
+//     .attr('class', 'sorting-button')
+//     .text('Clear Sorting')
+//     .on('click', () => {
+//       d3.select('#sortColumnSelect').property('value', 'Select a column...');
+//       d3.select('#sortDirectionSelect').property('value', 'ascending');
+//       resetSorting();
+//     });
+// }
+
+
+function updateSortingControlsForBlocks() {
+  // Get the sorting container
+  const sortingControls = d3.select('.sorting-controls');
+  
+  // Add block sorting criteria selector
+  const blockSortSelect = sortingControls.append('select')
+    .attr('id', 'blockSortSelect')
+    .attr('class', 'sorting-select')
+    .style('margin-top', '10px')
+    .style('display', document.getElementById('gridSummaryButton').classList.contains('active') ? 'block' : 'none');
+
+  // Add block sorting options
+  blockSortSelect.selectAll('option')
+    .data([
+      { value: 'none', text: 'Select block sorting...' },
+      { value: 'size', text: 'Block Size' },
+      { value: 'mean', text: 'Mean Value (Numerical)' },
+      { value: 'frequency', text: 'Most Frequent Value (Categorical)' }
+    ])
+    .enter()
+    .append('option')
+    .attr('value', d => d.value)
+    .text(d => d.text)
+    .property('disabled', d => d.value === 'none');
+
+  // Add change event listener
+  blockSortSelect.on('change', function() {
+    const sortType = this.value;
+    if (sortType !== 'none') {
+      sortBlocks(sortType, d3.select('#sortDirectionSelect').property('value'));
+    }
+  });
+}
+
+function sortBlocks(sortType, direction) {
+  if (!gridSummaryData || !gridSummaryData.blocks) return;
+
+  const blocks = gridSummaryData.blocks;
+  
+  // Helper function to calculate block metrics
+  function getBlockMetric(block, type) {
+    switch(type) {
+      case 'size':
+        return block.data.length * block.data[0].length;
+      case 'mean':
+        if (block.type === 'numerical') {
+          let sum = 0, count = 0;
+          block.data.forEach(row => {
+            row.forEach(val => {
+              if (!isNaN(val) && val !== '') {
+                sum += Number(val);
+                count++;
+              }
+            });
+          });
+          return count > 0 ? sum / count : -Infinity;
+        }
+        return -Infinity;
+      case 'frequency':
+        if (block.type === 'categorical') {
+          const valueCounts = {};
+          block.data.forEach(row => {
+            row.forEach(val => {
+              if (val !== '') {
+                valueCounts[val] = (valueCounts[val] || 0) + 1;
+              }
+            });
+          });
+          const maxCount = Math.max(...Object.values(valueCounts));
+          return maxCount;
+        }
+        return -Infinity;
+      default:
+        return 0;
+    }
+  }
+
+  // Sort blocks based on the selected metric
+  const sortedBlocks = {};
+  const blockEntries = Object.entries(blocks);
+  
+  blockEntries.sort((a, b) => {
+    const metricA = getBlockMetric(a[1], sortType);
+    const metricB = getBlockMetric(b[1], sortType);
+    
+    return direction === 'ascending' ? 
+      metricA - metricB : 
+      metricB - metricA;
+  });
+
+  // Rebuild blocks object with sorted entries
+  blockEntries.forEach(([key, value]) => {
+    sortedBlocks[key] = value;
+  });
+
+  // Update gridSummaryData with sorted blocks
+  gridSummaryData.blocks = sortedBlocks;
+  
+  // Refresh visualization
+  visualizeGridSummary(gridSummaryData);
+}
+
+// Modify existing initializeSortingControls to include block sorting
 function initializeSortingControls(data) {
   if (!data || !data.length) return;
   
-  // Get column names from the first row of data
   const columns = Object.keys(data[0] || {});
   
-  // Remove any existing sorting controls
+  // Remove existing controls
   d3.select('.sorting-container').selectAll('.sorting-controls').remove();
   
-  // Create the controls container
   const sortingControls = d3.select('.sorting-container')
     .append('div')
     .attr('class', 'sorting-controls');
@@ -1982,7 +2151,6 @@ function initializeSortingControls(data) {
       }
     });
 
-  // Add options to column selector
   columnSelect.selectAll('option')
     .data(['Select a column...'].concat(columns))
     .enter()
@@ -2001,9 +2169,13 @@ function initializeSortingControls(data) {
       if (selectedColumn !== 'Select a column...') {
         updateSorting(selectedColumn, sortDirection);
       }
+      // Also update block sorting if active
+      const blockSortType = d3.select('#blockSortSelect').property('value');
+      if (blockSortType !== 'none') {
+        sortBlocks(blockSortType, sortDirection);
+      }
     });
 
-  // Add direction options
   directionSelect.selectAll('option')
     .data(['Ascending', 'Descending'])
     .enter()
@@ -2019,9 +2191,21 @@ function initializeSortingControls(data) {
     .on('click', () => {
       d3.select('#sortColumnSelect').property('value', 'Select a column...');
       d3.select('#sortDirectionSelect').property('value', 'ascending');
+      d3.select('#blockSortSelect').property('value', 'none');
       resetSorting();
     });
+
+  // Add block sorting controls
+  updateSortingControlsForBlocks();
 }
+
+// Add event listener to Grid Summary button to toggle block sorting controls
+document.getElementById('gridSummaryButton').addEventListener('click', function() {
+  const blockSort = document.getElementById('blockSortSelect');
+  if (blockSort) {
+    blockSort.style.display = this.classList.contains('active') ? 'block' : 'none';
+  }
+});
 
 function updateSorting(column, direction) {
   if (!csvFileData) return;
