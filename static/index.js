@@ -626,6 +626,87 @@ function convertProcessedDataToCSV(data, headers) {
 let originalDataOrder = null;
 let currentClusteredData = null;
 
+// function synchronizeGridViews(clusterData) {
+//   if (!csvFileData || !clusterData || !clusterData.blocks) return;
+  
+//   const originalData = d3.csvParse(csvFileData);
+//   currentClusteredData = clusterData;
+  
+//   // Store original order if not already stored
+//   if (!originalDataOrder) {
+//     originalDataOrder = {
+//       rows: originalData.map((_, i) => i),
+//       columns: originalData.columns.slice()
+//     };
+//   }
+
+//   // Get unique row clusters
+//   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
+  
+//   // Create a map of ID to row data
+//   const idToRow = new Map();
+//   originalData.forEach(row => {
+//     idToRow.set(row.ID.toString(), row);
+//   });
+
+//   // Build ordered rows based on block data
+//   let orderedRows = [];
+//   let processedIds = new Set();
+  
+//   // Process each row cluster in order
+//   rowClusters.forEach(rowCluster => {
+//     // Get all blocks for this row cluster
+//     const clusterBlocks = Object.entries(clusterData.blocks)
+//       .filter(([key]) => key.split(',')[0] === rowCluster)
+//       .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+
+//     // Process each block
+//     clusterBlocks.forEach(([_, block]) => {
+//       // Get IDs from this block's data
+//       block.data.forEach(rowData => {
+//         const id = rowData[0].toString(); // First column is ID
+//         if (!processedIds.has(id)) {
+//           const originalRow = idToRow.get(id);
+//           if (originalRow) {
+//             orderedRows.push(originalRow);
+//             processedIds.add(id);
+//           }
+//         }
+//       });
+//     });
+//   });
+
+//   // Add any remaining unprocessed rows
+//   originalData.forEach(row => {
+//     if (!processedIds.has(row.ID.toString())) {
+//       orderedRows.push(row);
+//     }
+//   });
+
+//   // Get ordered columns
+//   const columnOrder = new Set();
+//   Object.values(clusterData.blocks).forEach(block => {
+//     if (block.columns) {
+//       block.columns.forEach(col => columnOrder.add(col));
+//     }
+//   });
+
+//   // Create reordered CSV
+//   const reorderedCsv = d3.csvFormat(orderedRows.map(row => {
+//     const newRow = {};
+//     Array.from(columnOrder).forEach(col => {
+//       newRow[col] = row.hasOwnProperty(col) ? row[col] : '';
+//     });
+//     return newRow;
+//   }));
+
+//   // Update visualizations with reordered data
+//   visualizeCSVData(reorderedCsv);
+  
+//   // Add visual cluster boundaries
+//   addClusterBoundaries(rowClusters, orderedRows.length);
+// }
+
 function synchronizeGridViews(clusterData) {
   if (!csvFileData || !clusterData || !clusterData.blocks) return;
   
@@ -643,15 +724,9 @@ function synchronizeGridViews(clusterData) {
   // Get unique row clusters
   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
   
-  // Create a map of ID to row data
-  const idToRow = new Map();
-  originalData.forEach(row => {
-    idToRow.set(row.ID.toString(), row);
-  });
-
   // Build ordered rows based on block data
   let orderedRows = [];
-  let processedIds = new Set();
+  let processedRows = new Set();
   
   // Process each row cluster in order
   rowClusters.forEach(rowCluster => {
@@ -662,34 +737,41 @@ function synchronizeGridViews(clusterData) {
 
     // Process each block
     clusterBlocks.forEach(([_, block]) => {
-      // Get IDs from this block's data
-      block.data.forEach(rowData => {
-        const id = rowData[0].toString(); // First column is ID
-        if (!processedIds.has(id)) {
-          const originalRow = idToRow.get(id);
-          if (originalRow) {
-            orderedRows.push(originalRow);
-            processedIds.add(id);
-          }
+      // Handle the case where block.data might be undefined or empty
+      if (!block.data || !Array.isArray(block.data)) return;
+      
+      block.data.forEach((rowData, rowIndex) => {
+        // Skip if we've already processed this row
+        if (processedRows.has(rowIndex)) return;
+        
+        // Find corresponding row in original data
+        if (rowIndex < originalData.length) {
+          orderedRows.push(originalData[rowIndex]);
+          processedRows.add(rowIndex);
         }
       });
     });
   });
 
   // Add any remaining unprocessed rows
-  originalData.forEach(row => {
-    if (!processedIds.has(row.ID.toString())) {
+  originalData.forEach((row, index) => {
+    if (!processedRows.has(index)) {
       orderedRows.push(row);
     }
   });
 
-  // Get ordered columns
+  // Get ordered columns from the blocks
   const columnOrder = new Set();
   Object.values(clusterData.blocks).forEach(block => {
-    if (block.columns) {
+    if (block.columns && Array.isArray(block.columns)) {
       block.columns.forEach(col => columnOrder.add(col));
     }
   });
+
+  // If no columns were found in blocks, use all available columns
+  if (columnOrder.size === 0) {
+    originalData.columns.forEach(col => columnOrder.add(col));
+  }
 
   // Create reordered CSV
   const reorderedCsv = d3.csvFormat(orderedRows.map(row => {
@@ -1693,6 +1775,63 @@ function updateLegendStyles() {
   });
 }
 
+// function updateVisualizationsWithFilters() {
+//   if (!csvFileData) return;
+
+//   const data = d3.csvParse(csvFileData);
+  
+//   // Filter the data based on both categorical and numerical filters
+//   const filteredData = data.filter(row => {
+//     // Check categorical filters
+//     const categoricalMatch = Array.from(activeFilters.entries()).every(([column, values]) => {
+//       const rowValue = row[column];
+//       return values.has(rowValue) || 
+//              (values.has('OTHER') && !globalColorScales[column].scale.domain().includes(rowValue));
+//     });
+    
+//     // Check numerical filter if active
+//     let numericalMatch = true;
+//     if (activeNumericalFilters.column && activeNumericalFilters.range) {
+//       const value = +row[activeNumericalFilters.column];
+//       numericalMatch = value >= activeNumericalFilters.range[0] && 
+//                       value <= activeNumericalFilters.range[1];
+//     }
+    
+//     return categoricalMatch && numericalMatch;
+//   });
+
+//   // Convert filtered data back to CSV
+//   const filteredCsvData = d3.csvFormat(filteredData);
+
+//   // Update visualizations with filtered data
+//   visualizeCSVData(filteredCsvData);
+  
+//   // Update grid summary if active
+//   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+//     const formData = new FormData();
+//     const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
+//     formData.append('file', filteredBlob, 'filtered.csv');
+//     formData.append('rowClusters', document.getElementById('rowClusters').value);
+//     formData.append('colClusters', document.getElementById('colClusters').value);
+
+//     fetch('/get_clusters', {
+//       method: 'POST',
+//       body: formData
+//     })
+//     .then(response => response.json())
+//     .then(data => {
+//       if (!data.error) {
+//         visualizeGridSummary(data);
+//       }
+//     })
+//     .catch(error => console.error('Error:', error));
+//   }
+  
+//   // Update both legend styles
+//   updateLegendStyles();
+//   updateNumericalLegendStyles();
+// }
+
 function updateVisualizationsWithFilters() {
   if (!csvFileData) return;
 
@@ -1720,6 +1859,7 @@ function updateVisualizationsWithFilters() {
 
   // Convert filtered data back to CSV
   const filteredCsvData = d3.csvFormat(filteredData);
+  csvFileData = filteredCsvData; // Update the global csvFileData with filtered data
 
   // Update visualizations with filtered data
   visualizeCSVData(filteredCsvData);
@@ -1728,7 +1868,7 @@ function updateVisualizationsWithFilters() {
   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
     const formData = new FormData();
     const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
-    formData.append('file', filteredBlob, 'filtered.csv');
+    formData.append('file', new File([filteredBlob], 'filtered.csv', { type: 'text/csv' }));
     formData.append('rowClusters', document.getElementById('rowClusters').value);
     formData.append('colClusters', document.getElementById('colClusters').value);
 
@@ -1739,6 +1879,7 @@ function updateVisualizationsWithFilters() {
     .then(response => response.json())
     .then(data => {
       if (!data.error) {
+        gridSummaryData = data; // Update the global gridSummaryData
         visualizeGridSummary(data);
       }
     })
@@ -1749,6 +1890,7 @@ function updateVisualizationsWithFilters() {
   updateLegendStyles();
   updateNumericalLegendStyles();
 }
+
 async function fetchVSMData(csvData) {
   const formData = new FormData();
   formData.append('file', file);
