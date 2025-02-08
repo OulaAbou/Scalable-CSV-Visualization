@@ -2244,3 +2244,67 @@ function resetSorting() {
     }
   }
 }
+// Add this to your existing JavaScript file
+function exportCurrentCSV() {
+  if (!csvFileData) {
+    alert('No data available to export. Please load a CSV file first.');
+    return;
+  }
+
+  // Create file input for saving
+  const saveInput = document.createElement('input');
+  saveInput.type = 'file';
+  saveInput.nwsaveas = 'data.csv'; // Default filename
+  saveInput.accept = '.csv';
+  
+  saveInput.addEventListener('change', function(e) {
+    const blob = new Blob([csvFileData], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = e.target.files[0].name;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+  });
+  
+  saveInput.click();
+}
+
+// Add event listener to the export button
+document.getElementById('exportButton').addEventListener('click', exportCurrentCSV);
+
+async function exportCurrentCSV() {
+  if (!csvFileData) {
+      alert('No data available to export. Please load a CSV file first.');
+      return;
+  }
+
+  try {
+      // Create blob from the current CSV data
+      const blob = new Blob([csvFileData], { type: 'text/csv;charset=utf-8;' });
+      
+      // Open a save dialog using the File System Access API
+      const handle = await window.showSaveFilePicker({
+          suggestedName: 'data.csv',
+          types: [{
+              description: 'CSV Files',
+              accept: {
+                  'text/csv': ['.csv']
+              }
+          }]
+      });
+      
+      // Write the file
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      
+  } catch (err) {
+      if (err.name !== 'AbortError') {
+          console.error('Error exporting file:', err);
+          alert('Error exporting file. Please try again.');
+      }
+  }
+}

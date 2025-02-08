@@ -317,6 +317,28 @@
       .sorting-button:hover {
         background-color: #3d5871;
       }
+      .export-section {
+        margin: 20px 0;
+      }
+
+      .export-button {
+        width: 100%;
+        padding: 10px;
+        background-color: #2ecc71;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      .export-button:hover {
+        background-color: #27ae60;
+      }
+
+      .export-button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
    </style>
  </head>
  <body>
@@ -366,6 +388,9 @@
        <h3>Visual Similarity Matrix</h3>
        <div id="vsmCanvas"></div>
      </div>
+     <div class="export-section" style="margin-top: auto; padding-top: 20px;">
+      <button id="exportButton" class="export-button">Export CSV</button>
+    </div>
    </div>
    <div class="main-content">
     <div class="container-wrapper">
