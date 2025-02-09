@@ -13,7 +13,14 @@ import pandas as pd
 # # data = data.drop(columns=['ID'])
 # data.to_csv('breast+cancer+wisconsin+diagnostic/wdbc_withHeaders.csv', index=False)
 
-data = pd.read_csv('bank+marketing/bank/bank.csv', delimiter=';')
-data.sample(n=500).to_csv('bank+marketing/bank/bankCorrect.csv', index=False)
+# data = pd.read_csv('bank+marketing/bank/bank.csv', delimiter=';')
+# data.sample(n=500).to_csv('bank+marketing/bank/bankCorrect.csv', index=False)
 # data = pd.read_csv('breast+cancer+wisconsin+diagnostic/wdbc.csv')
 # print(data.head())
+
+data = pd.read_csv('data/diabetes.csv')
+data['Diagnosis'] = data['Outcome'].replace({1: 'Yes', 0: 'No'})
+
+data.to_csv('data/diabetesCategorised.csv', index=False)
+
+
