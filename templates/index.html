@@ -232,43 +232,43 @@
        border-top: none;
        padding-top: 0;
      }
-     .vsm-controls {
-        margin-top: 20px;
-        margin-bottom: 10px;
-      }
-
-      .vsm-select {
-        margin-left: 10px;
-        padding: 5px;
-        border-radius: 4px;
-        background-color: #34495e;
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-      }
-
       .vsm-container {
         background-color: #34495e;
         padding: 10px;
         border-radius: 5px;
         margin-top: 20px;
         width: 100%;
-        height: 200px;
+        height: 250px; /* Increased height for better visibility */
         box-sizing: border-box;
       }
 
-      .vsm-container h3 {
-        font-size: 16px;
-        margin: 0 0 10px 0;
-        padding-bottom: 5px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      .vsm-split {
+        display: flex;
+        gap: 10px;
+        height: 100%;
       }
 
-      #vsmCanvas {
+      .vsm-half {
+        flex: 1;
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        padding: 10px;
+      }
+
+      .vsm-canvas {
         width: 100%;
         height: calc(100% - 30px);
         display: flex;
         justify-content: center;
         align-items: center;
+      }
+
+      .vsm-half h3 {
+        font-size: 12px;
+        margin: 0 0 10px 0;
+        padding-bottom: 5px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
       }
 
       /* New sorting styles */
@@ -375,19 +375,18 @@
          <button id="clearSorting" class="sorting-button">Clear Sorting</button>
        </div>
      </div>
-
-     <div class="vsm-controls">
-      <label>Visual Similarity Matrix:</label>
-      <select id="vsmType" class="vsm-select">
-        <option value="columns">Columns</option>
-        <option value="rows">Rows</option>
-      </select>
-     </div>
-    
      <div class="vsm-container">
-       <h3>Visual Similarity Matrix</h3>
-       <div id="vsmCanvas"></div>
-     </div>
+      <div class="vsm-split">
+        <div class="vsm-half">
+          <h3>Columns Similarity Matrix</h3>
+          <div id="vsmColumnsCanvas" class="vsm-canvas"></div>
+        </div>
+        <div class="vsm-half">
+          <h3>Rows Similarity Matrix</h3>
+          <div id="vsmRowsCanvas" class="vsm-canvas"></div>
+        </div>
+      </div>
+    </div>
      <div class="export-section" style="margin-top: auto; padding-top: 20px;">
       <button id="exportButton" class="export-button">Export CSV</button>
     </div>

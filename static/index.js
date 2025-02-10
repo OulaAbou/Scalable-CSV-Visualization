@@ -1919,53 +1919,6 @@ function filterCSVByColumns(csvData) {
   return d3.csvFormat(filteredData);
 }
 
-
-// Update VSM visualization based on selected type
-function updateVSMVisualization() {
-  if (!vsmData) return;
-
-  const vsmType = document.getElementById('vsmType').value;
-  const container = document.getElementById('vsmCanvas');
-  
-  // Clear previous visualization
-  d3.select(container).selectAll('svg').remove();
-
-  // Get similarity matrix based on selected type
-  const matrix = vsmType === 'columns' ? vsmData.column_similarity : vsmData.row_similarity;
-
-  // Create SVG
-  const margin = 5;
-  const containerRect = container.getBoundingClientRect();
-  const size = Math.min(containerRect.width, containerRect.height) - (margin * 2);
-
-  const svg = d3.select(container)
-    .append('svg')
-    .attr('width', size)
-    .attr('height', size);
-
-  // Create color scale
-  const colorScale = d3.scaleLinear()
-    .domain([0, 1])
-    .range(['#fff', '#2c3e50']);
-
-  // Draw cells
-  const cellSize = size / matrix.length;
-  
-  matrix.forEach((row, i) => {
-    row.forEach((value, j) => {
-      svg.append('rect')
-        .attr('x', j * cellSize)
-        .attr('y', i * cellSize)
-        .attr('width', cellSize)
-        .attr('height', cellSize)
-        .attr('fill', colorScale(value));
-    });
-  });
-}
-
-// Add event listener for VSM type selection
-document.getElementById('vsmType').addEventListener('change', updateVSMVisualization);
-
 // Add this near your other global variables
 let currentSortConfig = {
   column: null,
@@ -2307,4 +2260,46 @@ async function exportCurrentCSV() {
           alert('Error exporting file. Please try again.');
       }
   }
+}
+
+// Update the VSM visualization function to show both matrices
+function updateVSMVisualization() {
+  if (!vsmData) return;
+
+  // Clear previous visualizations
+  d3.select('#vsmColumnsCanvas').selectAll('svg').remove();
+  d3.select('#vsmRowsCanvas').selectAll('svg').remove();
+
+  // Function to create a matrix visualization
+  function createMatrixVisualization(container, matrix) {
+    const margin = 5;
+    const containerRect = container.getBoundingClientRect();
+    const size = Math.min(containerRect.width, containerRect.height) - (margin * 2);
+
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', size)
+      .attr('height', size);
+
+    const colorScale = d3.scaleLinear()
+      .domain([0, 1])
+      .range(['#fff', '#2c3e50']);
+
+    const cellSize = size / matrix.length;
+    
+    matrix.forEach((row, i) => {
+      row.forEach((value, j) => {
+        svg.append('rect')
+          .attr('x', j * cellSize)
+          .attr('y', i * cellSize)
+          .attr('width', cellSize)
+          .attr('height', cellSize)
+          .attr('fill', colorScale(value));
+      });
+    });
+  }
+
+  // Create both visualizations
+  createMatrixVisualization(document.getElementById('vsmColumnsCanvas'), vsmData.column_similarity);
+  createMatrixVisualization(document.getElementById('vsmRowsCanvas'), vsmData.row_similarity);
 }
