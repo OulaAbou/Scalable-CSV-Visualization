@@ -1026,7 +1026,6 @@ function deleteRowCluster(rowCluster) {
   }
 }
 
-// Block Details visualization function
 function visualizeBlockDetails(blockData, blockType, columns) {
   const newContainer = document.querySelector('#newContainer');
   d3.select(newContainer).selectAll('svg').remove();
@@ -1034,8 +1033,9 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   const cellSize = 20;
   const gap = 5;
   const margin = 10;
-  const headerHeight = 30;
-  const startY = headerHeight + margin;
+  const maxHeaderLength = 10;
+  const headerHeight = 30; // Smaller height for compact headers
+  const startY = margin + headerHeight; // Rectangles start after compact header space
 
   const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
   const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
@@ -1047,12 +1047,19 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   // Add column names as headers vertically
   if (columns) {
     columns.forEach((col, index) => {
+      const xPos = margin + index * (cellSize + gap) + cellSize / 2;
+      const truncatedText = col.length > maxHeaderLength 
+        ? col.slice(0, maxHeaderLength) + '...' 
+        : col;
+      
       detailSvg.append('text')
-        .attr('x', margin + index * (cellSize + gap) + cellSize / 2)
-        .attr('y', headerHeight)
-        .attr('text-anchor', 'middle')
-        .attr('transform', `rotate(-90, ${margin + index * (cellSize + gap) + cellSize / 2}, ${headerHeight})`)
+        .attr('x', xPos)
+        .attr('y', startY - 5) // Position just above rectangles
+        .attr('text-anchor', 'start')
         .style('font-size', '12px')
+        .text(truncatedText)
+        .attr('transform', `rotate(-90, ${xPos}, ${startY - 5})`)
+        .append('title')
         .text(col);
     });
   }
