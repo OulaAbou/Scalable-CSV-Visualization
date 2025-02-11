@@ -219,9 +219,7 @@ document.getElementById('gridSummaryButton').addEventListener('click', function(
   }
 });
 
-
 function visualizeCSVData(csvData) {
-
   if (!csvData) {
     console.error('No CSV data provided');
     return;
@@ -255,8 +253,10 @@ function visualizeCSVData(csvData) {
     });
 
     const rectSize = 8;
-    const gap = 3;
+    const horizontalGap = 6;     // Gap between columns
+    const verticalGap = 3;       // Smaller gap between rows
     const columns = headers.filter(col => selectedColumns.has(col));
+    const maxHeaderLength = 10;
 
     if (!processedData.length || !columns.length) {
       console.error('No data or columns to visualize');
@@ -266,10 +266,33 @@ function visualizeCSVData(csvData) {
     const container = document.querySelector('#visualizationContainer');
     d3.select(container).selectAll('svg').remove();
 
+    const headerHeight = 100;     // Reduced from 120 to 100
+    const headerMargin = 80;      // Kept the same
+    const margin = 10;           // Kept the same
+    const startY = headerHeight; // Removed the extra margin to bring rectangles closer
+
     const svg = d3.select(container).append('svg')
       .attr('width', '100%')
       .attr('height', '100%')
       .style('overflow', 'auto');
+
+    // Add column headers
+    columns.forEach((col, index) => {
+      const xPos = margin + index * (rectSize + horizontalGap) + rectSize / 2;
+      const truncatedText = col.length > maxHeaderLength 
+        ? col.slice(0, maxHeaderLength) + '...' 
+        : col;
+      
+      svg.append('text')
+        .attr('x', xPos)
+        .attr('y', headerMargin)
+        .attr('text-anchor', 'start')
+        .style('font-size', '12px')
+        .text(truncatedText)
+        .attr('transform', `rotate(-90, ${xPos}, ${headerMargin})`)
+        .append('title')
+        .text(col);
+    });
 
     // Context menu for empty cells
     const emptyContextMenu = d3.select('body')
@@ -296,7 +319,7 @@ function visualizeCSVData(csvData) {
       .on('click', handleEmptyContextMenuClick);
 
     let selectedEmptyCells = new Set();
-    let yPos = 20;
+    let yPos = startY;
     let maxXPos = 0;
 
     function handleEmptyContextMenuClick(event, action) {
@@ -347,19 +370,17 @@ function visualizeCSVData(csvData) {
             .domain(domain)
             .range([0, scaleWidth]);
     
-          // Use a unique ID for the gradient
           const gradientId = `color-gradient-${Date.now()}`;
           
           const gradient = picker.append('svg')
             .attr('width', scaleWidth)
-            .attr('height', scaleHeight + 20) // Add space for labels
+            .attr('height', scaleHeight + 20)
             .append('defs')
             .append('linearGradient')
             .attr('id', gradientId)
             .attr('x1', '0%')
             .attr('x2', '100%');
     
-          // Use the column-specific color scale for the gradient stops
           const stops = d3.range(0, 1.1, 0.1).map(t => {
             const value = d3.quantile(domain, t);
             return {
@@ -386,7 +407,6 @@ function visualizeCSVData(csvData) {
               const x = event.offsetX;
               const value = gradientScale.invert(x);
               
-              // Update the actual data with the imputed value
               selectedCells.forEach(cell => {
                 const rowData = data[cell.row];
                 if (rowData) {
@@ -394,20 +414,17 @@ function visualizeCSVData(csvData) {
                 }
               });
               
-              // Update the CSV file data
               csvFileData = d3.csvFormat(data);
               
               overlay.remove();
               selectedEmptyCells.clear();
               
-              // Refresh visualizations with the updated data
               visualizeCSVData(csvFileData);
               if (document.getElementById('gridSummaryButton').classList.contains('active')) {
                 updateGridSummary();
               }
             });
     
-          // Add value labels
           svg.selectAll('.value-label')
             .data([stops[0], stops[stops.length - 1]])
             .enter()
@@ -433,7 +450,6 @@ function visualizeCSVData(csvData) {
             .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
             .text(d => d)
             .on('click', function(event, d) {
-              // Update the actual data with the imputed value
               selectedCells.forEach(cell => {
                 const rowData = data[cell.row];
                 if (rowData) {
@@ -441,13 +457,11 @@ function visualizeCSVData(csvData) {
                 }
               });
               
-              // Update the CSV file data
               csvFileData = d3.csvFormat(data);
               
               overlay.remove();
               selectedEmptyCells.clear();
               
-              // Refresh visualizations with the updated data
               visualizeCSVData(csvFileData);
               if (document.getElementById('gridSummaryButton').classList.contains('active')) {
                 updateGridSummary();
@@ -461,7 +475,6 @@ function visualizeCSVData(csvData) {
         case 'Delete Column':
           const columnsToDelete = new Set(selectedCells.map(cell => cell.col));
           
-          // Filter out the columns to delete from the data
           const newHeaders = headers.filter(h => !columnsToDelete.has(h));
           const newData = data.map(row => {
             const newRow = {};
@@ -473,39 +486,31 @@ function visualizeCSVData(csvData) {
             return newRow;
           });
           
-          // Update the CSV file data
           csvFileData = d3.csvFormat(newData);
           
-          // Update selected columns
           columnsToDelete.forEach(col => selectedColumns.delete(col));
           break;
     
         case 'Delete Row':
           const rowsToDelete = new Set(selectedCells.map(cell => cell.row));
           
-          // Filter out the rows to delete
           const filteredData = data.filter((_, index) => !rowsToDelete.has(index));
           
-          // Update the CSV file data
           csvFileData = d3.csvFormat(filteredData);
           break;
       }
     
-      // Refresh visualizations with the updated data
       visualizeCSVData(csvFileData);
       if (document.getElementById('gridSummaryButton').classList.contains('active')) {
         updateGridSummary();
       }
       
-      // Clear selection
       selectedEmptyCells.clear();
     }
-    
-
 
     // Draw cells
     processedData.forEach((row) => {
-      let xPos = 10;
+      let xPos = margin;
       
       columns.forEach((col) => {
         const value = row[col];
@@ -563,11 +568,11 @@ function visualizeCSVData(csvData) {
         rect.append('title')
            .text(`${col}: ${isMissing ? 'Missing value' : value}`);
 
-        xPos += rectSize + gap;
+        xPos += rectSize + horizontalGap;
       });
 
       maxXPos = Math.max(maxXPos, xPos);
-      yPos += rectSize + gap;
+      yPos += rectSize + verticalGap;
     });
 
     // Hide context menu when clicking outside
