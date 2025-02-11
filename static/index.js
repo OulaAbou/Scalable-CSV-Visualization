@@ -1034,8 +1034,11 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   const gap = 5;
   const margin = 10;
   const maxHeaderLength = 10;
-  const headerHeight = 30; // Smaller height for compact headers
-  const startY = margin + headerHeight; // Rectangles start after compact header space
+  
+  // Adjust spacing parameters
+  const headerHeight = 90;  // Reduced from 120 to 90
+  const headerMargin = 80;  // Increased to 65 to move headers even lower from top edge
+  const startY = headerHeight + margin; // Reduced gap between headers and rectangles
 
   const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
   const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
@@ -1054,17 +1057,17 @@ function visualizeBlockDetails(blockData, blockType, columns) {
       
       detailSvg.append('text')
         .attr('x', xPos)
-        .attr('y', startY - 5) // Position just above rectangles
+        .attr('y', headerMargin) // Headers start lower from top edge
         .attr('text-anchor', 'start')
         .style('font-size', '12px')
         .text(truncatedText)
-        .attr('transform', `rotate(-90, ${xPos}, ${startY - 5})`)
+        .attr('transform', `rotate(-90, ${xPos}, ${headerMargin})`)
         .append('title')
         .text(col);
     });
   }
 
-  // Draw cells
+  // Draw cells with reduced gap to headers
   blockData.forEach((row, rowIndex) => {
     let currentX = margin;
     
