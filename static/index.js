@@ -1491,7 +1491,8 @@ function createLegends(colorScales) {
 
   // Create numerical section
   const numericalBox = legendContainer.append('div')
-    .attr('class', 'numerical-legend');
+    .attr('class', 'numerical-legend')
+    .style('margin-top', '20px');
 
   numericalBox.append('h3')
     .style('font-size', '16px')
