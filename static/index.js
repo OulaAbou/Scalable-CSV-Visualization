@@ -2,7 +2,7 @@
 let file = null;
 let csvFileData = null;
 let globalColorScales = null;
-let gridSummaryData = null; // Add this to store the grid summary data
+let gridSummaryData = null; 
 let vsmData = null;
 let activeFilters = new Map();
 let activeNumericalFilters = {
@@ -627,7 +627,7 @@ function visualizeCSVData(csvData) {
     });
 
     const rectSize = 8;
-    const horizontalGap = 6;     // Gap between columns
+    const horizontalGap = 6;     
     const verticalGap = 3;       // Smaller gap between rows
     const columns = headers.filter(col => selectedColumns.has(col));
     const maxHeaderLength = 10;
@@ -640,10 +640,10 @@ function visualizeCSVData(csvData) {
     const container = document.querySelector('#visualizationContainer');
     d3.select(container).selectAll('svg').remove();
 
-    const headerHeight = 100;     // Reduced from 120 to 100
-    const headerMargin = 80;      // Kept the same
-    const margin = 10;           // Kept the same
-    const startY = headerHeight; // Removed the extra margin to bring rectangles closer
+    const headerHeight = 100;     
+    const headerMargin = 80;      
+    const margin = 10;           
+    const startY = headerHeight; 
 
     const svg = d3.select(container).append('svg')
       .attr('width', '100%')
@@ -1394,7 +1394,6 @@ function deleteColumnClusterByType(colCluster, blockType) {
   }
 }
 
-// The original deleteRowCluster function remains unchanged
 function deleteRowCluster(rowCluster) {
   if (gridSummaryData && gridSummaryData.blocks) {
     const newBlocks = {};
@@ -1417,10 +1416,9 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   const margin = 10;
   const maxHeaderLength = 10;
   
-  // Adjust spacing parameters
-  const headerHeight = 90;  // Reduced from 120 to 90
-  const headerMargin = 80;  // Increased to 65 to move headers even lower from top edge
-  const startY = headerHeight + margin; // Reduced gap between headers and rectangles
+  const headerHeight = 90;  
+  const headerMargin = 80;  
+  const startY = headerHeight + margin;
 
   const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
   const svgHeight = startY + margin + blockData.length * (cellSize + gap) - gap;
@@ -2181,7 +2179,6 @@ async function fetchVSMData(csvData) {
   }
 }
 
-// Add this function to create the column selector
 function createColumnSelector(columns) {
   allColumns = columns;
   selectedColumns = new Set(columns); // Initially select all columns
@@ -2312,7 +2309,6 @@ function filterCSVByColumns(csvData) {
   return d3.csvFormat(filteredData);
 }
 
-// Add this near your other global variables
 let currentSortConfig = {
   column: null,
   direction: null
@@ -2590,7 +2586,7 @@ function resetSorting() {
     }
   }
 }
-// Add this to your existing JavaScript file
+
 function exportCurrentCSV() {
   if (!csvFileData) {
     alert('No data available to export. Please load a CSV file first.');
