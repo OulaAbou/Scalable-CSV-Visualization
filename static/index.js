@@ -534,7 +534,7 @@ function visualizeCSVData(csvData) {
           .attr('data-column', col)
           .attr('data-row', row._rowIndex)
           // Add highlighting for active numerical or categorical filter column
-          .style('stroke', (activeNumericalFilters.column === col || activeFilters.has(col)) ? '#3498db' : 'none')
+          .style('stroke', (activeNumericalFilters.column === col || activeFilters.has(col)) ? '#000000' : 'none')
           .style('stroke-width', (activeNumericalFilters.column === col || activeFilters.has(col)) ? '1px' : '0');
 
         if (isMissing) {
