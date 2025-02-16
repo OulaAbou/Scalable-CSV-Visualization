@@ -398,13 +398,38 @@ function visualizeCSVData(csvData) {
             .append('stop')
             .attr('offset', d => d.offset)
             .attr('stop-color', d => d.color);
-    
-          const svg = picker.select('svg');
+
+            const svg = picker.select('svg');
+          
+          // Add a value display div
+          const valueDisplay = picker.append('div')
+            .style('position', 'absolute')
+            .style('background', 'rgba(0,0,0,0.8)')
+            .style('color', 'white')
+            .style('padding', '4px 8px')
+            .style('border-radius', '4px')
+            .style('font-size', '12px')
+            .style('pointer-events', 'none')
+            .style('display', 'none');
           
           svg.append('rect')
             .attr('width', scaleWidth)
             .attr('height', scaleHeight)
             .style('fill', `url(#${gradientId})`)
+            .on('mousemove', function(event) {
+              const x = event.offsetX;
+              const value = gradientScale.invert(x);
+              
+              // Update value display position and content
+              valueDisplay
+                .style('display', 'block')
+                .style('left', (event.offsetX + 10) + 'px')
+                .style('top', (event.offsetY - 25) + 'px')
+                .text(value.toFixed(2));
+            })
+            .on('mouseout', function() {
+              valueDisplay.style('display', 'none');
+            })
             .on('click', function(event) {
               const x = event.offsetX;
               const value = gradientScale.invert(x);
@@ -426,7 +451,7 @@ function visualizeCSVData(csvData) {
                 updateGridSummary();
               }
             });
-    
+            
           svg.selectAll('.value-label')
             .data([stops[0], stops[stops.length - 1]])
             .enter()
