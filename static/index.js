@@ -2,7 +2,7 @@
 let file = null;
 let csvFileData = null;
 let globalColorScales = null;
-let gridSummaryData = null; // Add this to store the grid summary data
+let gridSummaryData = null; 
 let vsmData = null;
 let activeFilters = new Map();
 let activeNumericalFilters = {
@@ -11,6 +11,10 @@ let activeNumericalFilters = {
 };
 let selectedColumns = new Set(); // Store selected column names
 let allColumns = []; // Store all column names
+// Global variable to store selected empty cells
+let selectedEmptyCells = new Set();
+
+let originalCSVData = null;
 
 // Add click event listener to the search tab
 document.querySelector('.search-tab').addEventListener('click', function() {
@@ -86,7 +90,6 @@ function generateColorScales(data) {
   return colorScales;
 }
 
-// Modify file input handler to immediately visualize CSV
 document.getElementById('csvFileInput').addEventListener('change', async function(event) {
   file = event.target.files[0];
   if (file) {
@@ -94,7 +97,8 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
       const reader = new FileReader();
       
       reader.onload = async function(e) {
-        csvFileData = e.target.result;
+        originalCSVData = e.target.result; // Store original data
+        csvFileData = originalCSVData;     // Set current data
         try {
           const data = d3.csvParse(csvFileData);
           createColumnSelector(data.columns);
@@ -105,6 +109,7 @@ document.getElementById('csvFileInput').addEventListener('change', async functio
           
           // Update visualizations
           createLegends(globalColorScales);
+          initializeSortingControls(data);
           visualizeCSVData(csvFileData);
           await fetchVSMData(csvFileData);
           
@@ -223,19 +228,16 @@ function visualizeCSVData(csvData) {
   }
 
   try {
-    // Parse CSV with special handling for malformed rows
     const allRows = csvData.split('\n');
-    const headers = allRows[0].split(',').map(h => h.trim());
+    let headers = allRows[0].split(',').map(h => h.trim());
     const expectedColumns = headers.length;
     
-    // Process each row to find extra and missing values
-    const processedData = allRows.slice(1).map((row, rowIndex) => {
+    let processedData = allRows.slice(1).map((row, rowIndex) => {
       const values = row.split(',').map(v => v.trim());
       const rowData = {
-        _rowIndex: rowIndex, // Add row index for reference
+        _rowIndex: rowIndex,
       };
       
-      // Store regular values and track missing values
       headers.forEach((header, i) => {
         rowData[header] = values[i] || '';
         if (!values[i] || values[i].trim() === '') {
@@ -244,7 +246,6 @@ function visualizeCSVData(csvData) {
         }
       });
       
-      // Store extra values if any exist
       if (values.length > expectedColumns) {
         rowData._extraValues = values.slice(expectedColumns);
         rowData._extraValuesStartIndex = expectedColumns;
@@ -254,10 +255,10 @@ function visualizeCSVData(csvData) {
     });
 
     const rectSize = 8;
-    const gap = 3;
-    
-    // Only use columns that are currently selected
+    const horizontalGap = 6;     
+    const verticalGap = 3;       // Smaller gap between rows
     const columns = headers.filter(col => selectedColumns.has(col));
+    const maxHeaderLength = 10;
 
     if (!processedData.length || !columns.length) {
       console.error('No data or columns to visualize');
@@ -267,15 +268,38 @@ function visualizeCSVData(csvData) {
     const container = document.querySelector('#visualizationContainer');
     d3.select(container).selectAll('svg').remove();
 
+    const headerHeight = 100;     
+    const headerMargin = 80;      
+    const margin = 10;           
+    const startY = headerHeight; 
+
     const svg = d3.select(container).append('svg')
       .attr('width', '100%')
       .attr('height', '100%')
       .style('overflow', 'auto');
 
-    // Add context menu for extra values
-    const contextMenu = d3.select('body')
+    // Add column headers
+    columns.forEach((col, index) => {
+      const xPos = margin + index * (rectSize + horizontalGap) + rectSize / 2;
+      const truncatedText = col.length > maxHeaderLength 
+        ? col.slice(0, maxHeaderLength) + '...' 
+        : col;
+      
+      svg.append('text')
+        .attr('x', xPos)
+        .attr('y', headerMargin)
+        .attr('text-anchor', 'start')
+        .style('font-size', '12px')
+        .text(truncatedText)
+        .attr('transform', `rotate(-90, ${xPos}, ${headerMargin})`)
+        .append('title')
+        .text(col);
+    });
+
+    // Context menu for empty cells
+    const emptyContextMenu = d3.select('body')
       .append('div')
-      .attr('class', 'extra-values-menu')
+      .attr('class', 'empty-cell-menu')
       .style('position', 'absolute')
       .style('display', 'none')
       .style('background', '#2c3e50')
@@ -285,79 +309,245 @@ function visualizeCSVData(csvData) {
       .style('z-index', '1000');
 
     // Add menu items
-    contextMenu.append('div')
+    emptyContextMenu.selectAll('.menu-item')
+      .data(['Delete Column', 'Delete Row', 'Impute Value'])
+      .enter()
+      .append('div')
       .attr('class', 'menu-item')
-      .text('Delete Selected')
+      .text(d => d)
       .style('padding', '5px 10px')
       .style('cursor', 'pointer')
       .style('color', 'white')
-      .on('click', deleteSelectedExtraValues);
+      .on('click', handleEmptyContextMenuClick);
 
-    let yPos = 20;
+    let selectedEmptyCells = new Set();
+    let yPos = startY;
     let maxXPos = 0;
-    let selectedExtraValues = new Set();
 
-    function deleteSelectedExtraValues() {
-      // Hide context menu
-      contextMenu.style('display', 'none');
-
-      // Remove selected extra values from the data
-      processedData.forEach(row => {
-        if (row._extraValues) {
-          row._extraValues = row._extraValues.filter((_, i) => !selectedExtraValues.has(`${row._rowIndex}-${i}`));
-          if (row._extraValues.length === 0) {
-            delete row._extraValues;
-            delete row._extraValuesStartIndex;
-          }
-        }
-      });
-
-      // Clear selection and redraw
-      selectedExtraValues.clear();
-      visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-    }
-
-    // Function to convert processed data back to CSV
-    function convertProcessedDataToCSV(data, headers) {
-      const csvRows = [headers.join(',')];
+    function handleEmptyContextMenuClick(event, action) {
+      emptyContextMenu.style('display', 'none');
       
-      data.forEach(row => {
-        const values = headers.map(header => row[header] || '');
-        if (row._extraValues) {
-          values.push(...row._extraValues);
-        }
-        csvRows.push(values.join(','));
+      if (selectedEmptyCells.size === 0) return;
+    
+      const selectedCells = Array.from(selectedEmptyCells).map(id => {
+        const [row, col] = id.split('-');
+        return { row: parseInt(row), col };
       });
+    
+      // Parse the current CSV data
+      const data = d3.csvParse(csvFileData);
+      const headers = data.columns;
+    
+      // Prevent immediate execution for impute value
+      if (action === 'Impute Value') {
+        const column = selectedCells[0].col;
+        const colorScale = globalColorScales[column];
+        
+        // Create color picker overlay
+        const overlay = d3.select('body')
+          .append('div')
+          .style('position', 'fixed')
+          .style('top', '0')
+          .style('left', '0')
+          .style('width', '100%')
+          .style('height', '100%')
+          .style('background', 'rgba(0,0,0,0.8)')
+          .style('z-index', '2000');
+    
+        const picker = overlay
+          .append('div')
+          .style('position', 'absolute')
+          .style('top', '50%')
+          .style('left', '50%')
+          .style('transform', 'translate(-50%, -50%)')
+          .style('background', 'white')
+          .style('padding', '20px')
+          .style('border-radius', '5px');
+    
+        if (colorScale.type === 'numerical') {
+          const scaleWidth = 300;
+          const scaleHeight = 40;
+          const domain = colorScale.scale.domain();
+          const gradientScale = d3.scaleLinear()
+            .domain(domain)
+            .range([0, scaleWidth]);
+    
+          const gradientId = `color-gradient-${Date.now()}`;
+          
+          const gradient = picker.append('svg')
+            .attr('width', scaleWidth)
+            .attr('height', scaleHeight + 20)
+            .append('defs')
+            .append('linearGradient')
+            .attr('id', gradientId)
+            .attr('x1', '0%')
+            .attr('x2', '100%');
+    
+          const stops = d3.range(0, 1.1, 0.1).map(t => {
+            const value = d3.quantile(domain, t);
+            return {
+              offset: t * 100 + '%',
+              color: colorScale.scale(value),
+              value: value
+            };
+          });
+    
+          gradient.selectAll('stop')
+            .data(stops)
+            .enter()
+            .append('stop')
+            .attr('offset', d => d.offset)
+            .attr('stop-color', d => d.color);
+
+            const svg = picker.select('svg');
+          
+          // Add a value display div
+          const valueDisplay = picker.append('div')
+            .style('position', 'absolute')
+            .style('background', 'rgba(0,0,0,0.8)')
+            .style('color', 'white')
+            .style('padding', '4px 8px')
+            .style('border-radius', '4px')
+            .style('font-size', '12px')
+            .style('pointer-events', 'none')
+            .style('display', 'none');
+          
+          svg.append('rect')
+            .attr('width', scaleWidth)
+            .attr('height', scaleHeight)
+            .style('fill', `url(#${gradientId})`)
+            .on('mousemove', function(event) {
+              const x = event.offsetX;
+              const value = gradientScale.invert(x);
+              
+              // Update value display position and content
+              valueDisplay
+                .style('display', 'block')
+                .style('left', (event.offsetX + 10) + 'px')
+                .style('top', (event.offsetY - 25) + 'px')
+                .text(value.toFixed(2));
+            })
+            .on('mouseout', function() {
+              valueDisplay.style('display', 'none');
+            })
+            .on('click', function(event) {
+              const x = event.offsetX;
+              const value = gradientScale.invert(x);
+              
+              selectedCells.forEach(cell => {
+                const rowData = data[cell.row];
+                if (rowData) {
+                  rowData[cell.col] = value.toFixed(2);
+                }
+              });
+              
+              csvFileData = d3.csvFormat(data);
+              
+              overlay.remove();
+              selectedEmptyCells.clear();
+              
+              visualizeCSVData(csvFileData);
+              if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+                updateGridSummary();
+              }
+            });
+            
+          svg.selectAll('.value-label')
+            .data([stops[0], stops[stops.length - 1]])
+            .enter()
+            .append('text')
+            .attr('class', 'value-label')
+            .attr('x', (d, i) => i === 0 ? 0 : scaleWidth)
+            .attr('y', scaleHeight + 15)
+            .attr('text-anchor', (d, i) => i === 0 ? 'start' : 'end')
+            .style('font-size', '12px')
+            .text(d => d.value.toFixed(2));
+    
+        } else if (colorScale.type === 'categorical') {
+          const categories = colorScale.scale.domain();
+          
+          picker.selectAll('.category')
+            .data(categories)
+            .enter()
+            .append('div')
+            .style('cursor', 'pointer')
+            .style('padding', '5px')
+            .style('margin', '5px')
+            .style('background-color', d => colorScale.scale(d))
+            .style('color', d => d3.lab(colorScale.scale(d)).l < 50 ? 'white' : 'black')
+            .text(d => d)
+            .on('click', function(event, d) {
+              selectedCells.forEach(cell => {
+                const rowData = data[cell.row];
+                if (rowData) {
+                  rowData[cell.col] = d;
+                }
+              });
+              
+              csvFileData = d3.csvFormat(data);
+              
+              overlay.remove();
+              selectedEmptyCells.clear();
+              
+              visualizeCSVData(csvFileData);
+              if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+                updateGridSummary();
+              }
+            });
+        }
+        return;
+      }
+    
+      switch(action) {
+        case 'Delete Column':
+          const columnsToDelete = new Set(selectedCells.map(cell => cell.col));
+          
+          const newHeaders = headers.filter(h => !columnsToDelete.has(h));
+          const newData = data.map(row => {
+            const newRow = {};
+            newHeaders.forEach(header => {
+              if (!columnsToDelete.has(header)) {
+                newRow[header] = row[header];
+              }
+            });
+            return newRow;
+          });
+          
+          csvFileData = d3.csvFormat(newData);
+          
+          columnsToDelete.forEach(col => selectedColumns.delete(col));
+          break;
+    
+        case 'Delete Row':
+          const rowsToDelete = new Set(selectedCells.map(cell => cell.row));
+          
+          const filteredData = data.filter((_, index) => !rowsToDelete.has(index));
+          
+          csvFileData = d3.csvFormat(filteredData);
+          break;
+      }
+    
+      visualizeCSVData(csvFileData);
+      if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+        updateGridSummary();
+      }
       
-      return csvRows.join('\n');
+      selectedEmptyCells.clear();
     }
 
     // Draw cells
     processedData.forEach((row) => {
-      let xPos = 10;
+      let xPos = margin;
       
-      // Draw regular columns
       columns.forEach((col) => {
         const value = row[col];
         const isMissing = !value || value.trim() === '';
         const colorScale = globalColorScales[col];
 
-        let color;
-        if (isMissing) {
-          color = '#ff0000';
-        } else {
-          try {
-            if (colorScale.type === 'numerical') {
-              const numValue = +value;
-              color = !isNaN(numValue) ? colorScale.scale(numValue) : '#ff0000';
-            } else if (colorScale.type === 'categorical') {
-              color = colorScale.scale(value);
-            }
-          } catch (err) {
-            console.warn(`Error applying color scale for column ${col}:`, err);
-            color = '#cccccc';
-          }
-        }
+        let color = isMissing ? '#ff0000' : 
+          colorScale.type === 'numerical' ? 
+            (!isNaN(+value) ? colorScale.scale(+value) : '#ff0000') :
+            colorScale.scale(value);
 
         const rect = svg.append('rect')
           .attr('x', xPos)
@@ -367,122 +557,58 @@ function visualizeCSVData(csvData) {
           .attr('fill', color)
           .attr('class', 'grid-cell')
           .attr('data-column', col)
-          .attr('data-row', row._rowIndex);
+          .attr('data-row', row._rowIndex)
+          // Add highlighting for active numerical or categorical filter column
+          .style('stroke', (activeNumericalFilters.column === col || activeFilters.has(col)) ? '#000000' : 'none')
+          .style('stroke-width', (activeNumericalFilters.column === col || activeFilters.has(col)) ? '1px' : '0');
 
         if (isMissing) {
-          rect.style('stroke', '#880000')
-              .style('stroke-width', '1px');
+          const cellId = `${row._rowIndex}-${col}`;
+          
+          rect.style('stroke', selectedEmptyCells.has(cellId) ? '#00ff00' : '#880000')
+              .style('stroke-width', '1px')
+              .style('cursor', 'pointer')
+              .on('click', function(event) {
+                if (event.ctrlKey || event.metaKey) {
+                  if (selectedEmptyCells.has(cellId)) {
+                    selectedEmptyCells.delete(cellId);
+                    d3.select(this).style('stroke', '#880000');
+                  } else {
+                    selectedEmptyCells.add(cellId);
+                    d3.select(this).style('stroke', '#00ff00');
+                  }
+                } else {
+                  selectedEmptyCells.clear();
+                  svg.selectAll('.grid-cell').style('stroke', '#880000');
+                  selectedEmptyCells.add(cellId);
+                  d3.select(this).style('stroke', '#00ff00');
+                }
+              })
+              .on('contextmenu', function(event) {
+                event.preventDefault();
+                if (selectedEmptyCells.size > 0) {
+                  emptyContextMenu
+                    .style('display', 'block')
+                    .style('left', (event.pageX + 5) + 'px')
+                    .style('top', (event.pageY + 5) + 'px');
+                }
+              });
         }
 
         rect.append('title')
            .text(`${col}: ${isMissing ? 'Missing value' : value}`);
 
-        // Make empty cells droppable
-        if (isMissing) {
-          rect.attr('class', 'grid-cell droppable')
-              .on('dragover', function(event) {
-                event.preventDefault();
-                d3.select(this).style('stroke', '#00ff00');
-              })
-              .on('dragleave', function() {
-                d3.select(this).style('stroke', '#880000');
-              })
-              .on('drop', function(event) {
-                event.preventDefault();
-                const sourceId = event.dataTransfer.getData('text/plain');
-                const [sourceRow, sourceIndex] = sourceId.split('-');
-                
-                // Update data
-                const sourceRowData = processedData[sourceRow];
-                const droppedValue = sourceRowData._extraValues[sourceIndex];
-                
-                // Update the target cell
-                row[col] = droppedValue;
-                
-                // Remove the value from extra values
-                sourceRowData._extraValues.splice(sourceIndex, 1);
-                if (sourceRowData._extraValues.length === 0) {
-                  delete sourceRowData._extraValues;
-                  delete sourceRowData._extraValuesStartIndex;
-                }
-                
-                // Redraw the visualization
-                visualizeCSVData(convertProcessedDataToCSV(processedData, headers));
-              });
-        }
-
-        xPos += rectSize + gap;
+        xPos += rectSize + horizontalGap;
       });
 
-      // Draw extra values if they exist
-      if (row._extraValues) {
-        // Calculate position for extra values
-        const extraXPos = 10 + (columns.length * (rectSize + gap));
-        
-        row._extraValues.forEach((value, i) => {
-          const extraId = `${row._rowIndex}-${i}`;
-          
-          const extraRect = svg.append('rect')
-            .attr('x', extraXPos + (i * (rectSize + gap)))
-            .attr('y', yPos)
-            .attr('width', rectSize)
-            .attr('height', rectSize)
-            .attr('fill', '#ff0000')
-            .attr('class', 'extra-value')
-            .attr('data-id', extraId)
-            .style('cursor', 'pointer')
-            .style('stroke', selectedExtraValues.has(extraId) ? '#00ff00' : '#880000')
-            .style('stroke-width', '1px')
-            .attr('draggable', true)
-            .on('dragstart', function(event) {
-              event.dataTransfer.setData('text/plain', extraId);
-              event.dataTransfer.effectAllowed = 'move';
-            })
-            .on('click', function(event) {
-              const id = d3.select(this).attr('data-id');
-              if (event.ctrlKey || event.metaKey) {
-                // Toggle selection
-                if (selectedExtraValues.has(id)) {
-                  selectedExtraValues.delete(id);
-                  d3.select(this).style('stroke', '#880000');
-                } else {
-                  selectedExtraValues.add(id);
-                  d3.select(this).style('stroke', '#00ff00');
-                }
-              } else {
-                // Clear previous selection
-                selectedExtraValues.clear();
-                svg.selectAll('.extra-value').style('stroke', '#880000');
-                // Select this item
-                selectedExtraValues.add(id);
-                d3.select(this).style('stroke', '#00ff00');
-              }
-            })
-            .on('contextmenu', function(event) {
-              event.preventDefault();
-              if (selectedExtraValues.size > 0) {
-                contextMenu
-                  .style('display', 'block')
-                  .style('left', (event.pageX + 5) + 'px')
-                  .style('top', (event.pageY + 5) + 'px');
-              }
-            });
-
-          extraRect.append('title')
-            .text(`Extra value: ${value}`);
-
-          maxXPos = Math.max(maxXPos, extraXPos + (i * (rectSize + gap)) + rectSize);
-        });
-      }
-
       maxXPos = Math.max(maxXPos, xPos);
-      yPos += rectSize + gap;
+      yPos += rectSize + verticalGap;
     });
 
     // Hide context menu when clicking outside
     d3.select('body').on('click', function(event) {
-      if (!event.target.closest('.extra-values-menu')) {
-        contextMenu.style('display', 'none');
+      if (!event.target.closest('.empty-cell-menu')) {
+        emptyContextMenu.style('display', 'none');
       }
     });
 
@@ -496,6 +622,41 @@ function visualizeCSVData(csvData) {
   }
 }
 
+// Helper function to update grid summary
+function updateGridSummary() {
+  const formData = new FormData();
+  const blob = new Blob([csvFileData], { type: 'text/csv' });
+  formData.append('file', new File([blob], 'updated.csv', { type: 'text/csv' }));
+  formData.append('rowClusters', document.getElementById('rowClusters').value);
+  formData.append('colClusters', document.getElementById('colClusters').value);
+
+  fetch('/get_clusters', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (!data.error) {
+      visualizeGridSummary(data);
+    }
+  })
+  .catch(error => console.error('Error:', error));
+}
+
+function convertProcessedDataToCSV(data, headers) {
+  const csvRows = [headers.join(',')];
+  
+  data.forEach(row => {
+    const values = headers.map(header => row[header] || '');
+    if (row._extraValues) {
+      values.push(...row._extraValues);
+    }
+    csvRows.push(values.join(','));
+  });
+  
+  return csvRows.join('\n');
+}
+
 // Store the original data order for reference
 let originalDataOrder = null;
 let currentClusteredData = null;
@@ -503,68 +664,74 @@ let currentClusteredData = null;
 function synchronizeGridViews(clusterData) {
   if (!csvFileData || !clusterData || !clusterData.blocks) return;
   
-  const data = d3.csvParse(csvFileData);
+  const originalData = d3.csvParse(csvFileData);
   currentClusteredData = clusterData;
   
   // Store original order if not already stored
   if (!originalDataOrder) {
     originalDataOrder = {
-      rows: data.map((_, i) => i),
-      columns: data.columns.slice()
+      rows: originalData.map((_, i) => i),
+      columns: originalData.columns.slice()
     };
   }
 
-  // Get unique row clusters in order
+  // Get unique row clusters
   const rowClusters = [...new Set(Object.keys(clusterData.blocks).map(key => key.split(',')[0]))];
   
-  // Create ordered arrays for rows and columns
-  let rowOrder = [];
-  let columnOrder = new Set();
+  // Build ordered rows based on block data
+  let orderedRows = [];
+  let processedRows = new Set();
   
-  // Process blocks by row cluster order
+  // Process each row cluster in order
   rowClusters.forEach(rowCluster => {
     // Get all blocks for this row cluster
     const clusterBlocks = Object.entries(clusterData.blocks)
-      .filter(([key]) => key.split(',')[0] === rowCluster);
-    
-    // Calculate number of rows in this cluster from first block
-    if (clusterBlocks.length > 0) {
-      const rowCount = clusterBlocks[0][1].data.length;
-      const startIdx = rowOrder.length;
+      .filter(([key]) => key.split(',')[0] === rowCluster)
+      .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+
+    // Process each block
+    clusterBlocks.forEach(([_, block]) => {
+      // Handle the case where block.data might be undefined or empty
+      if (!block.data || !Array.isArray(block.data)) return;
       
-      // Add indices for all rows in this cluster
-      for (let i = 0; i < rowCount; i++) {
-        rowOrder.push(startIdx + i);
-      }
-      
-      // Add columns from all blocks in this cluster
-      clusterBlocks.forEach(([_, block]) => {
-        if (block.columns) {
-          block.columns.forEach(col => columnOrder.add(col));
+      block.data.forEach((rowData, rowIndex) => {
+        // Skip if we've already processed this row
+        if (processedRows.has(rowIndex)) return;
+        
+        // Find corresponding row in original data
+        if (rowIndex < originalData.length) {
+          orderedRows.push(originalData[rowIndex]);
+          processedRows.add(rowIndex);
         }
       });
+    });
+  });
+
+  // Add any remaining unprocessed rows
+  originalData.forEach((row, index) => {
+    if (!processedRows.has(index)) {
+      orderedRows.push(row);
     }
   });
 
-  // Reorder the data based on clustering
-  const reorderedData = rowOrder.map(i => {
-    if (i < data.length) {
-      return data[i];
+  // Get ordered columns from the blocks
+  const columnOrder = new Set();
+  Object.values(clusterData.blocks).forEach(block => {
+    if (block.columns && Array.isArray(block.columns)) {
+      block.columns.forEach(col => columnOrder.add(col));
     }
-    // Handle case where index is out of bounds
-    console.warn(`Row index ${i} is out of bounds`);
-    return data[data.length - 1]; // Use last row as fallback
   });
-  
-  const reorderedColumns = Array.from(columnOrder);
-  
-  // Create new CSV string with reordered data
-  const reorderedCsv = d3.csvFormat(reorderedData.map(row => {
+
+  // If no columns were found in blocks, use all available columns
+  if (columnOrder.size === 0) {
+    originalData.columns.forEach(col => columnOrder.add(col));
+  }
+
+  // Create reordered CSV
+  const reorderedCsv = d3.csvFormat(orderedRows.map(row => {
     const newRow = {};
-    reorderedColumns.forEach(col => {
-      if (row.hasOwnProperty(col)) {
-        newRow[col] = row[col];
-      }
+    Array.from(columnOrder).forEach(col => {
+      newRow[col] = row.hasOwnProperty(col) ? row[col] : '';
     });
     return newRow;
   }));
@@ -573,7 +740,7 @@ function synchronizeGridViews(clusterData) {
   visualizeCSVData(reorderedCsv);
   
   // Add visual cluster boundaries
-  addClusterBoundaries(rowClusters, reorderedData.length);
+  addClusterBoundaries(rowClusters, orderedRows.length);
 }
 
 function addClusterBoundaries(rowClusters, totalRows) {
@@ -880,7 +1047,6 @@ function deleteColumnClusterByType(colCluster, blockType) {
   }
 }
 
-// The original deleteRowCluster function remains unchanged
 function deleteRowCluster(rowCluster) {
   if (gridSummaryData && gridSummaryData.blocks) {
     const newBlocks = {};
@@ -894,7 +1060,6 @@ function deleteRowCluster(rowCluster) {
   }
 }
 
-// Block Details visualization function
 function visualizeBlockDetails(blockData, blockType, columns) {
   const newContainer = document.querySelector('#newContainer');
   d3.select(newContainer).selectAll('svg').remove();
@@ -902,7 +1067,10 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   const cellSize = 20;
   const gap = 5;
   const margin = 10;
-  const headerHeight = 30;
+  const maxHeaderLength = 10;
+  
+  const headerHeight = 90;  
+  const headerMargin = 80;  
   const startY = headerHeight + margin;
 
   const svgWidth = margin * 2 + blockData[0].length * (cellSize + gap) - gap;
@@ -915,17 +1083,24 @@ function visualizeBlockDetails(blockData, blockType, columns) {
   // Add column names as headers vertically
   if (columns) {
     columns.forEach((col, index) => {
+      const xPos = margin + index * (cellSize + gap) + cellSize / 2;
+      const truncatedText = col.length > maxHeaderLength 
+        ? col.slice(0, maxHeaderLength) + '...' 
+        : col;
+      
       detailSvg.append('text')
-        .attr('x', margin + index * (cellSize + gap) + cellSize / 2)
-        .attr('y', headerHeight)
-        .attr('text-anchor', 'middle')
-        .attr('transform', `rotate(-90, ${margin + index * (cellSize + gap) + cellSize / 2}, ${headerHeight})`)
+        .attr('x', xPos)
+        .attr('y', headerMargin) // Headers start lower from top edge
+        .attr('text-anchor', 'start')
         .style('font-size', '12px')
+        .text(truncatedText)
+        .attr('transform', `rotate(-90, ${xPos}, ${headerMargin})`)
+        .append('title')
         .text(col);
     });
   }
 
-  // Draw cells
+  // Draw cells with reduced gap to headers
   blockData.forEach((row, rowIndex) => {
     let currentX = margin;
     
@@ -957,8 +1132,6 @@ function visualizeBlockDetails(blockData, blockType, columns) {
 }
 
 function createLegends(colorScales) {
-  // console.log('Creating legends with scales:', colorScales);
-  
   // Remove any existing legends
   d3.select('.control-panel').selectAll('.legend-container').remove();
   
@@ -969,7 +1142,8 @@ function createLegends(colorScales) {
 
   // Create numerical section
   const numericalBox = legendContainer.append('div')
-    .attr('class', 'numerical-legend');
+    .attr('class', 'numerical-legend')
+    .style('margin-top', '20px');
 
   numericalBox.append('h3')
     .style('font-size', '16px')
@@ -979,8 +1153,6 @@ function createLegends(colorScales) {
   const numericalColumns = Object.entries(colorScales)
     .filter(([_, scale]) => scale.type === 'numerical')
     .map(([column, _]) => column);
-
-  // console.log('Numerical columns:', numericalColumns);
 
   // Add column selector dropdown
   const dropdownContainer = numericalBox.append('div')
@@ -996,7 +1168,6 @@ function createLegends(colorScales) {
     .style('margin-bottom', '5px')
     .on('change', function() {
       const selectedColumn = this.value;
-      // console.log('Selected numerical column:', selectedColumn);
       activeNumericalFilters.column = selectedColumn === 'Select a column...' ? null : selectedColumn;
       activeNumericalFilters.range = null;
       if (selectedColumn !== 'Select a column...') {
@@ -1023,7 +1194,6 @@ function createLegends(colorScales) {
     .style('display', 'none')
     .text('Clear Numerical Filter')
     .on('click', () => {
-      // console.log('Clearing numerical filter');
       activeNumericalFilters.column = null;
       activeNumericalFilters.range = null;
       d3.select('#numericalColumnSelect').property('value', 'Select a column...');
@@ -1036,153 +1206,179 @@ function createLegends(colorScales) {
 
   // Create categorical section
   const categoricalBox = legendContainer.append('div')
-    .attr('class', 'categorical-legend');
+    .attr('class', 'categorical-legend')
+    .style('margin-top', '20px');
     
   categoricalBox.append('h3')
     .style('font-size', '16px')
     .text('Categorical Values');
 
-  // Sort scales
-  const categoricalScales = {};
-  Object.entries(colorScales).forEach(([column, scale]) => {
-    if (scale.type === 'categorical') {
-      categoricalScales[column] = scale;
-    }
-  });
+  // Get categorical columns
+  const categoricalColumns = Object.entries(colorScales)
+    .filter(([_, scale]) => scale.type === 'categorical')
+    .map(([column, _]) => column);
 
-  // console.log('Categorical scales:', categoricalScales);
+  // Add categorical dropdown
+  const catDropdownContainer = categoricalBox.append('div')
+    .style('margin-bottom', '10px');
 
-  // Add interactive categorical legends
-  if (Object.keys(categoricalScales).length > 0) {
-    const uniqueSchemes = new Map();
-    Object.entries(categoricalScales).forEach(([column, scale]) => {
-      const schemeKey = scale.scale.range().join(',');
-      if (!uniqueSchemes.has(schemeKey)) {
-        uniqueSchemes.set(schemeKey, {
-          scale: scale.scale,
-          columns: [column]
-        });
-      } else {
-        uniqueSchemes.get(schemeKey).columns.push(column);
+  catDropdownContainer.append('select')
+    .attr('id', 'categoricalColumnSelect')
+    .style('width', '100%')
+    .style('padding', '5px')
+    .style('background-color', '#2c3e50')
+    .style('color', 'white')
+    .style('border', '1px solid #34495e')
+    .style('margin-bottom', '5px')
+    .on('change', function() {
+      const selectedColumn = this.value;
+      updateCategoricalLegend(selectedColumn === 'Select a column...' ? null : selectedColumn, colorScales);
+    })
+    .selectAll('option')
+    .data(['Select a column...'].concat(categoricalColumns))
+    .enter()
+    .append('option')
+    .text(d => d)
+    .property('disabled', d => d === 'Select a column...')
+    .property('selected', d => d === 'Select a column...');
+
+  // Add clear categorical filter button
+  const clearCatButton = categoricalBox.append('button')
+    .attr('id', 'clearCategoricalFilter')
+    .style('font-size', '0.8em')
+    .style('padding', '2px 5px')
+    .style('background-color', '#34495e')
+    .style('border', 'none')
+    .style('color', 'white')
+    .style('cursor', 'pointer')
+    .style('display', 'none')
+    .text('Clear Categorical Filter')
+    .on('click', () => {
+      const selectedColumn = d3.select('#categoricalColumnSelect').property('value');
+      if (selectedColumn !== 'Select a column...') {
+        activeFilters.delete(selectedColumn);
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(selectedColumn, colorScales);
       }
     });
 
-    uniqueSchemes.forEach((schemeInfo, schemeKey) => {
-      const schemeContainer = categoricalBox.append('div')
-        .attr('class', 'scheme-container');
-      
-      schemeContainer.append('div')
-        .style('font-size', '0.8em')
-        .style('margin-bottom', '3px')
-        .style('color', '#bdc3c7')
-        .text(`Columns: ${schemeInfo.columns.join(', ')}`);
-
-      // Add clear filters button
-      const clearButton = schemeContainer.append('button')
-        .style('font-size', '0.8em')
-        .style('margin-bottom', '5px')
-        .style('padding', '2px 5px')
-        .style('background-color', '#34495e')
-        .style('border', 'none')
-        .style('color', 'white')
-        .style('cursor', 'pointer')
-        .style('display', 'none')
-        .text('Clear Filters')
-        .on('click', () => {
-          // console.log('Clearing categorical filters for columns:', schemeInfo.columns);
-          schemeInfo.columns.forEach(column => {
-            activeFilters.delete(column);
-          });
-          updateVisualizationsWithFilters();
-          updateLegendStyles();
-        });
-
-      const swatchContainer = schemeContainer.append('div')
-        .style('display', 'flex')
-        .style('flex-direction', 'column')
-        .style('gap', '5px');
-
-      // Add interactive swatches
-      schemeInfo.scale.domain().forEach((value) => {
-        const swatchRow = swatchContainer.append('div')
-          .style('display', 'flex')
-          .style('align-items', 'center')
-          .style('gap', '5px')
-          .style('cursor', 'pointer')
-          .on('click', () => {
-            // console.log('Clicked categorical value:', value);
-            schemeInfo.columns.forEach(column => {
-              if (!activeFilters.has(column)) {
-                activeFilters.set(column, new Set([value]));
-              } else {
-                const columnFilters = activeFilters.get(column);
-                if (columnFilters.has(value)) {
-                  columnFilters.delete(value);
-                  if (columnFilters.size === 0) {
-                    activeFilters.delete(column);
-                  }
-                } else {
-                  columnFilters.add(value);
-                }
-              }
-            });
-            // console.log('Active filters after click:', Array.from(activeFilters.entries()));
-            updateVisualizationsWithFilters();
-            updateLegendStyles();
-          });
-
-        swatchRow.append('div')
-          .attr('class', 'color-swatch')
-          .style('width', '15px')
-          .style('height', '15px')
-          .style('background-color', schemeInfo.scale(value))
-          .style('border', '1px solid transparent');
-
-        swatchRow.append('span')
-          .style('font-size', '0.8em')
-          .text(value);
-      });
-
-      // Add "Other" swatch
-      const otherRow = swatchContainer.append('div')
-        .style('display', 'flex')
-        .style('align-items', 'center')
-        .style('gap', '5px')
-        .style('cursor', 'pointer')
-        .on('click', () => {
-          schemeInfo.columns.forEach(column => {
-            if (!activeFilters.has(column)) {
-              activeFilters.set(column, new Set(['OTHER']));
-            } else {
-              const columnFilters = activeFilters.get(column);
-              if (columnFilters.has('OTHER')) {
-                columnFilters.delete('OTHER');
-                if (columnFilters.size === 0) {
-                  activeFilters.delete(column);
-                }
-              } else {
-                columnFilters.add('OTHER');
-              }
-            }
-          });
-          updateVisualizationsWithFilters();
-          updateLegendStyles();
-        });
-
-      otherRow.append('div')
-        .attr('class', 'color-swatch')
-        .style('width', '15px')
-        .style('height', '15px')
-        .style('background-color', schemeInfo.scale.unknown())
-        .style('border', '1px solid transparent');
-
-      otherRow.append('span')
-        .style('font-size', '0.8em')
-        .text('Other');
-    });
-  }
+  // Create container for categorical swatches
+  categoricalBox.append('div')
+    .attr('class', 'categorical-swatches')
+    .style('margin-top', '10px');
 }
 
+function updateCategoricalLegend(column, colorScales) {
+  const swatchesContainer = d3.select('.categorical-swatches');
+  const clearButton = d3.select('#clearCategoricalFilter');
+  
+  // Clear existing swatches
+  swatchesContainer.selectAll('*').remove();
+  
+  if (!column) {
+    clearButton.style('display', 'none');
+    return;
+  }
+
+  const scale = colorScales[column];
+  
+  // Create swatches for each value
+  const swatchContainer = swatchesContainer.append('div')
+    .style('display', 'flex')
+    .style('flex-direction', 'column')
+    .style('gap', '5px');
+
+  // Add swatches for each value in the domain
+  scale.scale.domain().forEach((value) => {
+    const swatchRow = swatchContainer.append('div')
+      .style('display', 'flex')
+      .style('align-items', 'center')
+      .style('gap', '5px')
+      .style('cursor', 'pointer')
+      .on('click', () => {
+        if (!activeFilters.has(column)) {
+          activeFilters.set(column, new Set([value]));
+        } else {
+          const columnFilters = activeFilters.get(column);
+          if (columnFilters.has(value)) {
+            columnFilters.delete(value);
+            if (columnFilters.size === 0) {
+              activeFilters.delete(column);
+            }
+          } else {
+            columnFilters.add(value);
+          }
+        }
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(column, colorScales);
+      });
+
+    const isSelected = activeFilters.has(column) && activeFilters.get(column).has(value);
+
+    swatchRow.append('div')
+      .attr('class', 'color-swatch')
+      .style('width', '15px')
+      .style('height', '15px')
+      .style('background-color', scale.scale(value))
+      .style('border', isSelected ? '2px solid white' : '1px solid transparent');
+
+    swatchRow.append('span')
+      .style('font-size', '0.8em')
+      .style('color', isSelected ? '#3498db' : 'white')
+      .text(value);
+  });
+
+  // Add "Other" swatch if scale has unknown values
+  if (scale.scale.unknown) {
+    const otherRow = swatchContainer.append('div')
+      .style('display', 'flex')
+      .style('align-items', 'center')
+      .style('gap', '5px')
+      .style('cursor', 'pointer')
+      .on('click', () => {
+        if (!activeFilters.has(column)) {
+          activeFilters.set(column, new Set(['OTHER']));
+        } else {
+          const columnFilters = activeFilters.get(column);
+          if (columnFilters.has('OTHER')) {
+            columnFilters.delete('OTHER');
+            if (columnFilters.size === 0) {
+              activeFilters.delete(column);
+            }
+          } else {
+            columnFilters.add('OTHER');
+          }
+        }
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(column, colorScales);
+      });
+
+    const isOtherSelected = activeFilters.has(column) && activeFilters.get(column).has('OTHER');
+
+    otherRow.append('div')
+      .attr('class', 'color-swatch')
+      .style('width', '15px')
+      .style('height', '15px')
+      .style('background-color', scale.scale.unknown())
+      .style('border', isOtherSelected ? '2px solid white' : '1px solid transparent');
+
+    otherRow.append('span')
+      .style('font-size', '0.8em')
+      .style('color', isOtherSelected ? '#3498db' : 'white')
+      .text('Other');
+  }
+
+  // Show/hide and configure clear button
+  clearButton
+    .style('display', activeFilters.has(column) ? 'block' : 'none')
+    .on('click', () => {
+      if (column !== 'Select a column...') {
+        activeFilters.delete(column);
+        updateVisualizationsWithFilters();
+        updateCategoricalLegend(column, colorScales);
+      }
+    });
+}
 
 function createNumericalLegend(container) {
   const gradientHeight = 15;
@@ -1499,23 +1695,27 @@ function updateNumericalLegendStyles() {
   
   // Show/hide clear button
   d3.select('#clearNumericalFilter')
-    .style('display', hasFilter ? 'block' : 'none');
+    .style('display', hasFilter ? 'block' : 'none')
+    .on('click', function() {
+      activeNumericalFilters.column = null;
+      activeNumericalFilters.range = null;
+      d3.select('#numericalColumnSelect').property('value', 'Select a column...');
+      d3.select('#rangeSliderContainer').style('display', 'none');
+      updateVisualizationsWithFilters();
+    });
   
   // Update gradient opacity
   d3.select('#numericalGradient rect')
     .style('opacity', hasFilter ? 0.5 : 1);
   
   if (hasFilter) {
-    // Add range indicator
     const scale = globalColorScales[activeNumericalFilters.column].scale;
     const domain = scale.domain();
     const range = activeNumericalFilters.range;
     
-    // Calculate positions for range indicator
     const x1 = (range[0] - domain[0]) / (domain[1] - domain[0]) * 100;
     const x2 = (range[1] - domain[0]) / (domain[1] - domain[0]) * 100;
     
-    // Add or update range indicator
     const gradientSvg = d3.select('#numericalGradient');
     gradientSvg.selectAll('.range-indicator').remove();
     
@@ -1529,24 +1729,20 @@ function updateNumericalLegendStyles() {
       .style('stroke', 'white')
       .style('stroke-width', '2px');
   } else {
-    // Remove range indicator
     d3.select('#numericalGradient').selectAll('.range-indicator').remove();
   }
 }
 
 function updateLegendStyles() {
-  // Update swatch styles based on active filters
   d3.selectAll('.scheme-container').each(function() {
     const container = d3.select(this);
     const columnText = container.select('div').text();
     const columns = columnText.replace('Columns: ', '').split(', ');
     
-    // Show/hide clear button
     const hasActiveFilters = columns.some(column => activeFilters.has(column));
     container.select('button')
       .style('display', hasActiveFilters ? 'block' : 'none');
 
-    // Update swatch styles
     container.selectAll('.color-swatch').each(function(_, i) {
       const swatch = d3.select(this);
       const value = d3.select(this.parentNode).select('span').text();
@@ -1563,9 +1759,19 @@ function updateLegendStyles() {
 }
 
 function updateVisualizationsWithFilters() {
-  if (!csvFileData) return;
+  if (!originalCSVData) return;
 
-  const data = d3.csvParse(csvFileData);
+  const data = d3.csvParse(originalCSVData); // Always start from original data
+  
+  // If no filters are active, use original data
+  if (activeFilters.size === 0 && (!activeNumericalFilters.column || !activeNumericalFilters.range)) {
+    csvFileData = originalCSVData;
+    visualizeCSVData(originalCSVData);
+    if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+      updateGridSummaryIfActive(originalCSVData);
+    }
+    return;
+  }
   
   // Filter the data based on both categorical and numerical filters
   const filteredData = data.filter(row => {
@@ -1587,37 +1793,41 @@ function updateVisualizationsWithFilters() {
     return categoricalMatch && numericalMatch;
   });
 
-  // Convert filtered data back to CSV
-  const filteredCsvData = d3.csvFormat(filteredData);
-
-  // Update visualizations with filtered data
-  visualizeCSVData(filteredCsvData);
+  // Update current view with filtered data
+  csvFileData = d3.csvFormat(filteredData);
+  visualizeCSVData(csvFileData);
   
   // Update grid summary if active
   if (document.getElementById('gridSummaryButton').classList.contains('active')) {
-    const formData = new FormData();
-    const filteredBlob = new Blob([filteredCsvData], { type: 'text/csv' });
-    formData.append('file', filteredBlob, 'filtered.csv');
-    formData.append('rowClusters', document.getElementById('rowClusters').value);
-    formData.append('colClusters', document.getElementById('colClusters').value);
-
-    fetch('/get_clusters', {
-      method: 'POST',
-      body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (!data.error) {
-        visualizeGridSummary(data);
-      }
-    })
-    .catch(error => console.error('Error:', error));
+    updateGridSummaryIfActive(csvFileData);
   }
   
-  // Update both legend styles
+  // Update legend styles
   updateLegendStyles();
   updateNumericalLegendStyles();
 }
+
+function updateGridSummaryIfActive(csvData) {
+  const formData = new FormData();
+  const filteredBlob = new Blob([csvData], { type: 'text/csv' });
+  formData.append('file', new File([filteredBlob], 'filtered.csv', { type: 'text/csv' }));
+  formData.append('rowClusters', document.getElementById('rowClusters').value);
+  formData.append('colClusters', document.getElementById('colClusters').value);
+
+  fetch('/get_clusters', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (!data.error) {
+      gridSummaryData = data;
+      visualizeGridSummary(data);
+    }
+  })
+  .catch(error => console.error('Error:', error));
+}
+
 async function fetchVSMData(csvData) {
   const formData = new FormData();
   formData.append('file', file);
@@ -1640,7 +1850,6 @@ async function fetchVSMData(csvData) {
   }
 }
 
-// Add this function to create the column selector
 function createColumnSelector(columns) {
   allColumns = columns;
   selectedColumns = new Set(columns); // Initially select all columns
@@ -1771,49 +1980,386 @@ function filterCSVByColumns(csvData) {
   return d3.csvFormat(filteredData);
 }
 
+let currentSortConfig = {
+  column: null,
+  direction: null
+};
 
-// Update VSM visualization based on selected type
-function updateVSMVisualization() {
-  if (!vsmData) return;
 
-  const vsmType = document.getElementById('vsmType').value;
-  const container = document.getElementById('vsmCanvas');
+function updateSortingControlsForBlocks() {
+  // Get the sorting container
+  const sortingControls = d3.select('.sorting-controls');
   
-  // Clear previous visualization
-  d3.select(container).selectAll('svg').remove();
+  // Add block sorting criteria selector
+  const blockSortSelect = sortingControls.append('select')
+    .attr('id', 'blockSortSelect')
+    .attr('class', 'sorting-select')
+    .style('margin-top', '10px')
+    .style('display', document.getElementById('gridSummaryButton').classList.contains('active') ? 'block' : 'none');
 
-  // Get similarity matrix based on selected type
-  const matrix = vsmType === 'columns' ? vsmData.column_similarity : vsmData.row_similarity;
+  // Add block sorting options
+  blockSortSelect.selectAll('option')
+    .data([
+      { value: 'none', text: 'Select block sorting...' },
+      { value: 'size', text: 'Block Size' },
+      { value: 'mean', text: 'Mean Value (Numerical)' },
+      { value: 'frequency', text: 'Most Frequent Value (Categorical)' }
+    ])
+    .enter()
+    .append('option')
+    .attr('value', d => d.value)
+    .text(d => d.text)
+    .property('disabled', d => d.value === 'none');
 
-  // Create SVG
-  const margin = 5;
-  const containerRect = container.getBoundingClientRect();
-  const size = Math.min(containerRect.width, containerRect.height) - (margin * 2);
-
-  const svg = d3.select(container)
-    .append('svg')
-    .attr('width', size)
-    .attr('height', size);
-
-  // Create color scale
-  const colorScale = d3.scaleLinear()
-    .domain([0, 1])
-    .range(['#fff', '#2c3e50']);
-
-  // Draw cells
-  const cellSize = size / matrix.length;
-  
-  matrix.forEach((row, i) => {
-    row.forEach((value, j) => {
-      svg.append('rect')
-        .attr('x', j * cellSize)
-        .attr('y', i * cellSize)
-        .attr('width', cellSize)
-        .attr('height', cellSize)
-        .attr('fill', colorScale(value));
-    });
+  // Add change event listener
+  blockSortSelect.on('change', function() {
+    const sortType = this.value;
+    if (sortType !== 'none') {
+      sortBlocks(sortType, d3.select('#sortDirectionSelect').property('value'));
+    }
   });
 }
 
-// Add event listener for VSM type selection
-document.getElementById('vsmType').addEventListener('change', updateVSMVisualization);
+function sortBlocks(sortType, direction) {
+  if (!gridSummaryData || !gridSummaryData.blocks) return;
+
+  const blocks = gridSummaryData.blocks;
+  
+  // Helper function to calculate block metrics
+  function getBlockMetric(block, type) {
+    switch(type) {
+      case 'size':
+        return block.data.length * block.data[0].length;
+      case 'mean':
+        if (block.type === 'numerical') {
+          let sum = 0, count = 0;
+          block.data.forEach(row => {
+            row.forEach(val => {
+              if (!isNaN(val) && val !== '') {
+                sum += Number(val);
+                count++;
+              }
+            });
+          });
+          return count > 0 ? sum / count : -Infinity;
+        }
+        return -Infinity;
+      case 'frequency':
+        if (block.type === 'categorical') {
+          const valueCounts = {};
+          block.data.forEach(row => {
+            row.forEach(val => {
+              if (val !== '') {
+                valueCounts[val] = (valueCounts[val] || 0) + 1;
+              }
+            });
+          });
+          const maxCount = Math.max(...Object.values(valueCounts));
+          return maxCount;
+        }
+        return -Infinity;
+      default:
+        return 0;
+    }
+  }
+
+  // Sort blocks based on the selected metric
+  const sortedBlocks = {};
+  const blockEntries = Object.entries(blocks);
+  
+  blockEntries.sort((a, b) => {
+    const metricA = getBlockMetric(a[1], sortType);
+    const metricB = getBlockMetric(b[1], sortType);
+    
+    return direction === 'ascending' ? 
+      metricA - metricB : 
+      metricB - metricA;
+  });
+
+  // Rebuild blocks object with sorted entries
+  blockEntries.forEach(([key, value]) => {
+    sortedBlocks[key] = value;
+  });
+
+  // Update gridSummaryData with sorted blocks
+  gridSummaryData.blocks = sortedBlocks;
+  
+  // Refresh visualization
+  visualizeGridSummary(gridSummaryData);
+}
+
+// Modify existing initializeSortingControls to include block sorting
+function initializeSortingControls(data) {
+  if (!data || !data.length) return;
+  
+  const columns = Object.keys(data[0] || {});
+  
+  // Remove existing controls
+  d3.select('.sorting-container').selectAll('.sorting-controls').remove();
+  
+  const sortingControls = d3.select('.sorting-container')
+    .append('div')
+    .attr('class', 'sorting-controls');
+
+  // Add column selector dropdown
+  const columnSelect = sortingControls.append('select')
+    .attr('id', 'sortColumnSelect')
+    .attr('class', 'sorting-select')
+    .on('change', function() {
+      const selectedColumn = this.value;
+      const sortDirection = d3.select('#sortDirectionSelect').property('value');
+      if (selectedColumn !== 'Select a column...') {
+        updateSorting(selectedColumn, sortDirection);
+      }
+    });
+
+  columnSelect.selectAll('option')
+    .data(['Select a column...'].concat(columns))
+    .enter()
+    .append('option')
+    .text(d => d)
+    .property('disabled', d => d === 'Select a column...')
+    .property('selected', d => d === 'Select a column...');
+
+  // Add sort direction selector
+  const directionSelect = sortingControls.append('select')
+    .attr('id', 'sortDirectionSelect')
+    .attr('class', 'sorting-select')
+    .on('change', function() {
+      const selectedColumn = d3.select('#sortColumnSelect').property('value');
+      const sortDirection = this.value;
+      if (selectedColumn !== 'Select a column...') {
+        updateSorting(selectedColumn, sortDirection);
+      }
+      // Also update block sorting if active
+      const blockSortType = d3.select('#blockSortSelect').property('value');
+      if (blockSortType !== 'none') {
+        sortBlocks(blockSortType, sortDirection);
+      }
+    });
+
+  directionSelect.selectAll('option')
+    .data(['Ascending', 'Descending'])
+    .enter()
+    .append('option')
+    .text(d => d)
+    .property('value', d => d.toLowerCase());
+
+  // Add clear sorting button
+  sortingControls.append('button')
+    .attr('id', 'clearSorting')
+    .attr('class', 'sorting-button')
+    .text('Clear Sorting')
+    .on('click', () => {
+      d3.select('#sortColumnSelect').property('value', 'Select a column...');
+      d3.select('#sortDirectionSelect').property('value', 'ascending');
+      d3.select('#blockSortSelect').property('value', 'none');
+      resetSorting();
+    });
+
+  // Add block sorting controls
+  updateSortingControlsForBlocks();
+}
+
+// Add event listener to Grid Summary button to toggle block sorting controls
+document.getElementById('gridSummaryButton').addEventListener('click', function() {
+  const blockSort = document.getElementById('blockSortSelect');
+  if (blockSort) {
+    blockSort.style.display = this.classList.contains('active') ? 'block' : 'none';
+  }
+});
+
+function updateSorting(column, direction) {
+  if (!csvFileData) return;
+
+  // Parse the current CSV data
+  const data = d3.csvParse(csvFileData);
+  
+  // Store current sort configuration
+  currentSortConfig.column = column;
+  currentSortConfig.direction = direction;
+  
+  // Sort the data
+  data.sort((a, b) => {
+    let valueA = a[column];
+    let valueB = b[column];
+    
+    // Handle numerical values
+    if (!isNaN(valueA) && !isNaN(valueB)) {
+      valueA = +valueA;
+      valueB = +valueB;
+    }
+    
+    // Handle null/undefined values
+    if (valueA == null) return direction === 'ascending' ? -1 : 1;
+    if (valueB == null) return direction === 'ascending' ? 1 : -1;
+    
+    // Compare values
+    if (valueA < valueB) return direction === 'ascending' ? -1 : 1;
+    if (valueA > valueB) return direction === 'ascending' ? 1 : -1;
+    return 0;
+  });
+
+  // Convert back to CSV
+  csvFileData = d3.csvFormat(data);
+  
+  // Update visualization
+  visualizeCSVData(csvFileData);
+
+  // Update grid summary if it's active
+  if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+    const formData = new FormData();
+    const sortedBlob = new Blob([csvFileData], { type: 'text/csv' });
+    formData.append('file', new File([sortedBlob], 'sorted.csv', { type: 'text/csv' }));
+    formData.append('rowClusters', document.getElementById('rowClusters').value);
+    formData.append('colClusters', document.getElementById('colClusters').value);
+
+    fetch('/get_clusters', {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.error) {
+        visualizeGridSummary(data);
+      }
+    })
+    .catch(error => console.error('Error:', error));
+  }
+}
+
+function resetSorting() {
+  currentSortConfig.column = null;
+  currentSortConfig.direction = null;
+  
+  if (csvFileData) {
+    visualizeCSVData(csvFileData);
+    
+    // Update grid summary if active
+    if (document.getElementById('gridSummaryButton').classList.contains('active')) {
+      const formData = new FormData();
+      const blob = new Blob([csvFileData], { type: 'text/csv' });
+      formData.append('file', new File([blob], 'reset.csv', { type: 'text/csv' }));
+      formData.append('rowClusters', document.getElementById('rowClusters').value);
+      formData.append('colClusters', document.getElementById('colClusters').value);
+
+      fetch('/get_clusters', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (!data.error) {
+          visualizeGridSummary(data);
+        }
+      })
+      .catch(error => console.error('Error:', error));
+    }
+  }
+}
+
+function exportCurrentCSV() {
+  if (!csvFileData) {
+    alert('No data available to export. Please load a CSV file first.');
+    return;
+  }
+
+  // Create file input for saving
+  const saveInput = document.createElement('input');
+  saveInput.type = 'file';
+  saveInput.nwsaveas = 'data.csv'; // Default filename
+  saveInput.accept = '.csv';
+  
+  saveInput.addEventListener('change', function(e) {
+    const blob = new Blob([csvFileData], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = e.target.files[0].name;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+  });
+  
+  saveInput.click();
+}
+
+// Add event listener to the export button
+document.getElementById('exportButton').addEventListener('click', exportCurrentCSV);
+
+async function exportCurrentCSV() {
+  if (!csvFileData) {
+      alert('No data available to export. Please load a CSV file first.');
+      return;
+  }
+
+  try {
+      // Create blob from the current CSV data
+      const blob = new Blob([csvFileData], { type: 'text/csv;charset=utf-8;' });
+      
+      // Open a save dialog using the File System Access API
+      const handle = await window.showSaveFilePicker({
+          suggestedName: 'data.csv',
+          types: [{
+              description: 'CSV Files',
+              accept: {
+                  'text/csv': ['.csv']
+              }
+          }]
+      });
+      
+      // Write the file
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      
+  } catch (err) {
+      if (err.name !== 'AbortError') {
+          console.error('Error exporting file:', err);
+          alert('Error exporting file. Please try again.');
+      }
+  }
+}
+
+// Update the VSM visualization function to show both matrices
+function updateVSMVisualization() {
+  if (!vsmData) return;
+
+  // Clear previous visualizations
+  d3.select('#vsmColumnsCanvas').selectAll('svg').remove();
+  d3.select('#vsmRowsCanvas').selectAll('svg').remove();
+
+  // Function to create a matrix visualization
+  function createMatrixVisualization(container, matrix) {
+    const margin = 5;
+    const containerRect = container.getBoundingClientRect();
+    const size = Math.min(containerRect.width, containerRect.height) - (margin * 2);
+
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', size)
+      .attr('height', size);
+
+    const colorScale = d3.scaleLinear()
+      .domain([0, 1])
+      .range(['#fff', '#2c3e50']);
+
+    const cellSize = size / matrix.length;
+    
+    matrix.forEach((row, i) => {
+      row.forEach((value, j) => {
+        svg.append('rect')
+          .attr('x', j * cellSize)
+          .attr('y', i * cellSize)
+          .attr('width', cellSize)
+          .attr('height', cellSize)
+          .attr('fill', colorScale(value));
+      });
+    });
+  }
+
+  // Create both visualizations
+  createMatrixVisualization(document.getElementById('vsmColumnsCanvas'), vsmData.column_similarity);
+  createMatrixVisualization(document.getElementById('vsmRowsCanvas'), vsmData.row_similarity);
+}
