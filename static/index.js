@@ -827,6 +827,23 @@ function visualizeGridSummary(data) {
   const container = d3.select('#gridSummaryButton').node().parentNode;
   d3.select(container).selectAll('svg').remove();
 
+  // Remove any existing tooltips
+  d3.select('#block-tooltip').remove();
+  
+  // Create tooltip div
+  const tooltip = d3.select('body').append('div')
+    .attr('id', 'block-tooltip')
+    .style('position', 'absolute')
+    .style('visibility', 'hidden')
+    .style('background-color', 'white')
+    .style('border', '1px solid #ddd')
+    .style('border-radius', '4px')
+    .style('padding', '8px')
+    .style('box-shadow', '0 2px 5px rgba(0,0,0,0.2)')
+    .style('font-size', '12px')
+    .style('max-width', '300px')
+    .style('z-index', '1000');
+
   const containerHeight = container.getBoundingClientRect().height;
   const containerWidth = container.getBoundingClientRect().width;
   const buttonHeight = d3.select('#gridSummaryButton').node().getBoundingClientRect().height;
@@ -931,6 +948,58 @@ function visualizeGridSummary(data) {
     return blockType === 'numerical' ? '#fdd49e' : '#a6cee3';
   }
 
+  // Function to generate block summary for tooltip
+  function generateBlockSummary(block, blockType, columns) {
+    const rowCount = block.data.length;
+    let summaryHTML = `<strong>Total Rows:</strong> ${rowCount}<br>`;
+    summaryHTML += `<strong>Columns:</strong> ${columns.join(', ')}<br><br>`;
+    
+    // Calculate statistics for each column
+    columns.forEach((col, colIndex) => {
+      summaryHTML += `<strong>${col}:</strong> `;
+      
+      if (blockType === 'numerical') {
+        // Calculate average for numerical columns
+        let sum = 0;
+        let count = 0;
+        block.data.forEach(row => {
+          const value = row[colIndex];
+          if (!isNaN(value) && value !== '') {
+            sum += Number(value);
+            count++;
+          }
+        });
+        
+        if (count > 0) {
+          const mean = (sum / count).toFixed(2);
+          summaryHTML += `Avg: ${mean}`;
+        } else {
+          summaryHTML += `No numerical data`;
+        }
+      } else if (blockType === 'categorical') {
+        // Calculate mode for categorical columns
+        const valueCounts = {};
+        block.data.forEach(row => {
+          const value = row[colIndex];
+          if (value !== '') {
+            valueCounts[value] = (valueCounts[value] || 0) + 1;
+          }
+        });
+        
+        if (Object.keys(valueCounts).length > 0) {
+          const mostFrequent = Object.entries(valueCounts)
+            .sort((a, b) => b[1] - a[1])[0];
+          summaryHTML += `Mode: ${mostFrequent[0]} (${mostFrequent[1]} occurrences)`;
+        } else {
+          summaryHTML += `No categorical data`;
+        }
+      }
+      summaryHTML += '<br>';
+    });
+    
+    return summaryHTML;
+  }
+
   // Visualize blocks
   Object.entries(groupedBlocks).forEach(([clusterKey, blockGroup]) => {
     const [rowCluster, colCluster] = clusterKey.split(',');
@@ -973,6 +1042,23 @@ function visualizeGridSummary(data) {
         .on('contextmenu', function(event) {
           event.preventDefault();
           showContextMenu(event, rowCluster, colCluster);
+        })
+        .on('mouseover', function(event) {
+          // Generate and display tooltip
+          const summaryHTML = generateBlockSummary(value, blockType, value.columns);
+          tooltip
+            .style('visibility', 'visible')
+            .html(summaryHTML);
+        })
+        .on('mousemove', function(event) {
+          // Position tooltip near cursor
+          tooltip
+            .style('top', (event.pageY + 10) + 'px')
+            .style('left', (event.pageX + 10) + 'px');
+        })
+        .on('mouseout', function() {
+          // Hide tooltip
+          tooltip.style('visibility', 'hidden');
         });
 
       currentX += scaledWidth;
